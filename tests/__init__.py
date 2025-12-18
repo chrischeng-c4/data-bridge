@@ -1,1 +1,1 @@
-"""Test package for data_bridge."""
+"""Test suite for data-bridge."""

@@ -1,0 +1,39 @@
+[package]
+name = "data-bridge-test"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Rust-powered test framework for data-bridge"
+
+[lib]
+name = "data_bridge_test"
+
+[dependencies]
+# Async runtime
+tokio.workspace = true
+futures.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Utilities
+chrono.workspace = true
+regex.workspace = true
+
+# HTTP Server (for test server)
+axum.workspace = true
+tower.workspace = true
+
+# Optional: HTTP client for API testing
+data-bridge-http = { path = "../data-bridge-http", optional = true }
+
+[features]
+default = ["http"]
+http = ["data-bridge-http"]

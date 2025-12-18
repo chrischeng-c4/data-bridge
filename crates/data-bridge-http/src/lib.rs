@@ -1,0 +1,25 @@
+//! data-bridge-http: High-performance async HTTP client
+//!
+//! A Rust HTTP client library designed for integration with Python via PyO3.
+//! Provides connection pooling, automatic latency measurement, and async operations.
+//!
+//! # Architecture
+//!
+//! This crate provides the core HTTP functionality:
+//! - `HttpClient`: Connection-pooled async HTTP client
+//! - `Request`: Request builder with headers, body, auth
+//! - `Response`: Response wrapper with latency measurement
+//!
+//! PyO3 bindings are in the `data-bridge` crate.
+
+pub mod client;
+pub mod config;
+pub mod error;
+pub mod request;
+pub mod response;
+
+pub use client::HttpClient;
+pub use config::HttpClientConfig;
+pub use error::{HttpError, HttpResult};
+pub use request::{HttpMethod, RequestBuilder};
+pub use response::HttpResponse;

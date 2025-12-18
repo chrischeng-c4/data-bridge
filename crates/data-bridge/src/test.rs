@@ -1,0 +1,1832 @@
+//! Test framework PyO3 bindings
+//!
+//! Provides Python bindings for the data-bridge-test crate.
+
+use data_bridge_test::{
+    TestMeta, TestResult, TestRunner, TestStatus, TestType,
+    TestReport, Reporter, ReportFormat, CoverageInfo, FileCoverage,
+    runner::{RunnerConfig, TestSummary}, reporter::EnvironmentInfo,
+    benchmark::{
+        BenchmarkConfig, BenchmarkResult, BenchmarkStats,
+        BenchmarkReport, BenchmarkReportGroup, BenchmarkEnvironment,
+    },
+};
+use pyo3::prelude::*;
+use pyo3::types::PyDict;
+
+// =====================
+// Enums
+// =====================
+
+/// Python TestType enum
+#[pyclass(name = "TestType", eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PyTestType {
+    Unit,
+    Profile,
+    Stress,
+    Security,
+}
+
+impl From<PyTestType> for TestType {
+    fn from(py_type: PyTestType) -> Self {
+        match py_type {
+            PyTestType::Unit => TestType::Unit,
+            PyTestType::Profile => TestType::Profile,
+            PyTestType::Stress => TestType::Stress,
+            PyTestType::Security => TestType::Security,
+        }
+    }
+}
+
+impl From<TestType> for PyTestType {
+    fn from(rust_type: TestType) -> Self {
+        match rust_type {
+            TestType::Unit => PyTestType::Unit,
+            TestType::Profile => PyTestType::Profile,
+            TestType::Stress => PyTestType::Stress,
+            TestType::Security => PyTestType::Security,
+        }
+    }
+}
+
+#[pymethods]
+impl PyTestType {
+    fn __str__(&self) -> &'static str {
+        match self {
+            PyTestType::Unit => "unit",
+            PyTestType::Profile => "profile",
+            PyTestType::Stress => "stress",
+            PyTestType::Security => "security",
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("TestType.{}", self.__str__().to_uppercase())
+    }
+}
+
+/// Python TestStatus enum
+#[pyclass(name = "TestStatus", eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PyTestStatus {
+    Passed,
+    Failed,
+    Skipped,
+    Error,
+}
+
+impl From<TestStatus> for PyTestStatus {
+    fn from(status: TestStatus) -> Self {
+        match status {
+            TestStatus::Passed => PyTestStatus::Passed,
+            TestStatus::Failed => PyTestStatus::Failed,
+            TestStatus::Skipped => PyTestStatus::Skipped,
+            TestStatus::Error => PyTestStatus::Error,
+        }
+    }
+}
+
+impl From<PyTestStatus> for TestStatus {
+    fn from(status: PyTestStatus) -> Self {
+        match status {
+            PyTestStatus::Passed => TestStatus::Passed,
+            PyTestStatus::Failed => TestStatus::Failed,
+            PyTestStatus::Skipped => TestStatus::Skipped,
+            PyTestStatus::Error => TestStatus::Error,
+        }
+    }
+}
+
+#[pymethods]
+impl PyTestStatus {
+    fn __str__(&self) -> &'static str {
+        match self {
+            PyTestStatus::Passed => "PASSED",
+            PyTestStatus::Failed => "FAILED",
+            PyTestStatus::Skipped => "SKIPPED",
+            PyTestStatus::Error => "ERROR",
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("TestStatus.{}", self.__str__())
+    }
+}
+
+/// Python ReportFormat enum
+#[pyclass(name = "ReportFormat", eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PyReportFormat {
+    Markdown,
+    Html,
+    Json,
+    Yaml,
+    JUnit,
+    Console,
+}
+
+impl From<PyReportFormat> for ReportFormat {
+    fn from(fmt: PyReportFormat) -> Self {
+        match fmt {
+            PyReportFormat::Markdown => ReportFormat::Markdown,
+            PyReportFormat::Html => ReportFormat::Html,
+            PyReportFormat::Json => ReportFormat::Json,
+            PyReportFormat::Yaml => ReportFormat::Yaml,
+            PyReportFormat::JUnit => ReportFormat::JUnit,
+            PyReportFormat::Console => ReportFormat::Console,
+        }
+    }
+}
+
+#[pymethods]
+impl PyReportFormat {
+    fn __str__(&self) -> &'static str {
+        match self {
+            PyReportFormat::Markdown => "markdown",
+            PyReportFormat::Html => "html",
+            PyReportFormat::Json => "json",
+            PyReportFormat::Yaml => "yaml",
+            PyReportFormat::JUnit => "junit",
+            PyReportFormat::Console => "console",
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("ReportFormat.{}", self.__str__().to_uppercase())
+    }
+}
+
+// =====================
+// TestMeta
+// =====================
+
+/// Python TestMeta class - metadata for a test
+#[pyclass(name = "TestMeta")]
+#[derive(Clone)]
+pub struct PyTestMeta {
+    inner: TestMeta,
+}
+
+#[pymethods]
+impl PyTestMeta {
+    /// Create new test metadata
+    #[new]
+    #[pyo3(signature = (name, test_type = None, timeout = None, tags = None))]
+    fn new(
+        name: String,
+        test_type: Option<PyTestType>,
+        timeout: Option<f64>,
+        tags: Option<Vec<String>>,
+    ) -> Self {
+        let mut meta = TestMeta::new(name);
+
+        if let Some(tt) = test_type {
+            meta = meta.with_type(tt.into());
+        }
+        if let Some(t) = timeout {
+            meta = meta.with_timeout(t);
+        }
+        if let Some(t) = tags {
+            meta = meta.with_tags(t);
+        }
+
+        Self { inner: meta }
+    }
+
+    /// Test name
+    #[getter]
+    fn name(&self) -> &str {
+        &self.inner.name
+    }
+
+    /// Full qualified name
+    #[getter]
+    fn full_name(&self) -> &str {
+        &self.inner.full_name
+    }
+
+    /// Set full name
+    #[setter]
+    fn set_full_name(&mut self, full_name: String) {
+        self.inner.full_name = full_name;
+    }
+
+    /// Test type
+    #[getter]
+    fn test_type(&self) -> PyTestType {
+        self.inner.test_type.into()
+    }
+
+    /// Timeout in seconds
+    #[getter]
+    fn timeout(&self) -> Option<f64> {
+        self.inner.timeout
+    }
+
+    /// Tags
+    #[getter]
+    fn tags(&self) -> Vec<String> {
+        self.inner.tags.clone()
+    }
+
+    /// Skip reason
+    #[getter]
+    fn skip_reason(&self) -> Option<&str> {
+        self.inner.skip_reason.as_deref()
+    }
+
+    /// Check if skipped
+    fn is_skipped(&self) -> bool {
+        self.inner.is_skipped()
+    }
+
+    /// Check if has tag
+    fn has_tag(&self, tag: &str) -> bool {
+        self.inner.has_tag(tag)
+    }
+
+    /// Skip this test
+    fn skip(&mut self, reason: String) {
+        self.inner.skip_reason = Some(reason);
+    }
+
+    /// Set source file path
+    fn set_file_path(&mut self, path: String) {
+        self.inner.file_path = Some(path);
+    }
+
+    /// Set line number
+    fn set_line_number(&mut self, line: u32) {
+        self.inner.line_number = Some(line);
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "TestMeta(name='{}', type={}, timeout={:?})",
+            self.inner.name, self.inner.test_type, self.inner.timeout
+        )
+    }
+}
+
+// =====================
+// TestResult
+// =====================
+
+/// Python TestResult class
+#[pyclass(name = "TestResult")]
+#[derive(Clone)]
+pub struct PyTestResult {
+    inner: TestResult,
+}
+
+#[pymethods]
+impl PyTestResult {
+    /// Create a passed result
+    #[staticmethod]
+    fn passed(meta: &PyTestMeta, duration_ms: u64) -> Self {
+        Self {
+            inner: TestResult::passed(meta.inner.clone(), duration_ms),
+        }
+    }
+
+    /// Create a failed result
+    #[staticmethod]
+    fn failed(meta: &PyTestMeta, duration_ms: u64, error: String) -> Self {
+        Self {
+            inner: TestResult::failed(meta.inner.clone(), duration_ms, error),
+        }
+    }
+
+    /// Create a skipped result
+    #[staticmethod]
+    fn skipped(meta: &PyTestMeta, reason: String) -> Self {
+        Self {
+            inner: TestResult::skipped(meta.inner.clone(), reason),
+        }
+    }
+
+    /// Create an error result
+    #[staticmethod]
+    fn error(meta: &PyTestMeta, duration_ms: u64, error: String) -> Self {
+        Self {
+            inner: TestResult::error(meta.inner.clone(), duration_ms, error),
+        }
+    }
+
+    /// Test metadata
+    #[getter]
+    fn meta(&self) -> PyTestMeta {
+        PyTestMeta {
+            inner: self.inner.meta.clone(),
+        }
+    }
+
+    /// Test status
+    #[getter]
+    fn status(&self) -> PyTestStatus {
+        self.inner.status.into()
+    }
+
+    /// Duration in milliseconds
+    #[getter]
+    fn duration_ms(&self) -> u64 {
+        self.inner.duration_ms
+    }
+
+    /// Error message
+    #[getter]
+    fn error_message(&self) -> Option<&str> {
+        self.inner.error.as_deref()
+    }
+
+    /// Stack trace
+    #[getter]
+    fn stack_trace(&self) -> Option<&str> {
+        self.inner.stack_trace.as_deref()
+    }
+
+    /// Set stack trace
+    fn set_stack_trace(&mut self, trace: String) {
+        self.inner.stack_trace = Some(trace);
+    }
+
+    /// Check if passed
+    fn is_passed(&self) -> bool {
+        self.inner.is_passed()
+    }
+
+    /// Check if failed
+    fn is_failed(&self) -> bool {
+        self.inner.is_failed()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "TestResult(name='{}', status={}, duration={}ms)",
+            self.inner.meta.name, self.inner.status, self.inner.duration_ms
+        )
+    }
+}
+
+// =====================
+// TestSummary
+// =====================
+
+/// Python TestSummary class
+#[pyclass(name = "TestSummary")]
+#[derive(Clone)]
+pub struct PyTestSummary {
+    inner: TestSummary,
+}
+
+#[pymethods]
+impl PyTestSummary {
+    /// Total tests
+    #[getter]
+    fn total(&self) -> usize {
+        self.inner.total
+    }
+
+    /// Passed tests
+    #[getter]
+    fn passed(&self) -> usize {
+        self.inner.passed
+    }
+
+    /// Failed tests
+    #[getter]
+    fn failed(&self) -> usize {
+        self.inner.failed
+    }
+
+    /// Skipped tests
+    #[getter]
+    fn skipped(&self) -> usize {
+        self.inner.skipped
+    }
+
+    /// Error tests
+    #[getter]
+    fn errors(&self) -> usize {
+        self.inner.errors
+    }
+
+    /// Total duration in ms
+    #[getter]
+    fn total_duration_ms(&self) -> u64 {
+        self.inner.total_duration_ms
+    }
+
+    /// Check if all passed
+    fn all_passed(&self) -> bool {
+        self.inner.all_passed()
+    }
+
+    /// Get pass rate
+    fn pass_rate(&self) -> f64 {
+        self.inner.pass_rate()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "TestSummary(total={}, passed={}, failed={}, skipped={})",
+            self.inner.total, self.inner.passed, self.inner.failed, self.inner.skipped
+        )
+    }
+}
+
+// =====================
+// TestRunner
+// =====================
+
+/// Python TestRunner class
+#[pyclass(name = "TestRunner")]
+pub struct PyTestRunner {
+    inner: TestRunner,
+}
+
+#[pymethods]
+impl PyTestRunner {
+    /// Create a new test runner
+    #[new]
+    #[pyo3(signature = (
+        test_type = None,
+        tags = None,
+        name_pattern = None,
+        fail_fast = false,
+        verbose = false,
+        parallel = false,
+        max_workers = 4
+    ))]
+    fn new(
+        test_type: Option<PyTestType>,
+        tags: Option<Vec<String>>,
+        name_pattern: Option<String>,
+        fail_fast: bool,
+        verbose: bool,
+        parallel: bool,
+        max_workers: usize,
+    ) -> Self {
+        let config = RunnerConfig {
+            test_type: test_type.map(Into::into),
+            tags: tags.unwrap_or_default(),
+            name_pattern,
+            fail_fast,
+            verbose,
+            parallel,
+            max_workers,
+        };
+
+        Self {
+            inner: TestRunner::new(config),
+        }
+    }
+
+    /// Start the test run
+    fn start(&mut self) {
+        self.inner.start();
+    }
+
+    /// Record a test result
+    fn record(&mut self, result: &PyTestResult) {
+        self.inner.record(result.inner.clone());
+    }
+
+    /// Get all results
+    fn results(&self) -> Vec<PyTestResult> {
+        self.inner
+            .results()
+            .iter()
+            .map(|r| PyTestResult { inner: r.clone() })
+            .collect()
+    }
+
+    /// Get summary
+    fn summary(&self) -> PyTestSummary {
+        PyTestSummary {
+            inner: self.inner.summary(),
+        }
+    }
+
+    /// Get total duration in seconds
+    fn total_duration_secs(&self) -> f64 {
+        self.inner.total_duration().as_secs_f64()
+    }
+
+    /// Check if test should run based on filters
+    fn should_run(&self, meta: &PyTestMeta) -> bool {
+        self.inner.should_run(&meta.inner)
+    }
+}
+
+// =====================
+// Expectation (Assertions)
+// =====================
+
+/// Python Expectation class for assertions
+#[pyclass(name = "Expectation")]
+pub struct PyExpectation {
+    value: PyObject,
+    negated: bool,
+}
+
+#[pymethods]
+impl PyExpectation {
+    /// Create a new expectation
+    #[new]
+    fn new(value: PyObject) -> Self {
+        Self {
+            value,
+            negated: false,
+        }
+    }
+
+    /// Negate the expectation
+    #[getter]
+    fn not_(&self, py: Python<'_>) -> PyResult<Self> {
+        Ok(Self {
+            value: self.value.clone_ref(py),
+            negated: !self.negated,
+        })
+    }
+
+    /// Assert equality
+    fn to_equal(&self, py: Python<'_>, expected: PyObject) -> PyResult<()> {
+        let result = self.value.bind(py).eq(expected.bind(py))?;
+        let passed = if self.negated { !result } else { result };
+
+        if passed {
+            Ok(())
+        } else {
+            let msg = if self.negated {
+                format!("Expected {:?} to NOT equal {:?}", self.value, expected)
+            } else {
+                format!("Expected {:?} to equal {:?}", self.value, expected)
+            };
+            Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
+        }
+    }
+
+    /// Assert truthiness
+    fn to_be_true(&self, py: Python<'_>) -> PyResult<()> {
+        let result = self.value.bind(py).is_truthy()?;
+        let passed = if self.negated { !result } else { result };
+
+        if passed {
+            Ok(())
+        } else {
+            let msg = if self.negated {
+                format!("Expected {:?} to be falsy", self.value)
+            } else {
+                format!("Expected {:?} to be truthy", self.value)
+            };
+            Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
+        }
+    }
+
+    /// Assert falsiness
+    fn to_be_false(&self, py: Python<'_>) -> PyResult<()> {
+        let result = !self.value.bind(py).is_truthy()?;
+        let passed = if self.negated { !result } else { result };
+
+        if passed {
+            Ok(())
+        } else {
+            let msg = if self.negated {
+                format!("Expected {:?} to be truthy", self.value)
+            } else {
+                format!("Expected {:?} to be falsy", self.value)
+            };
+            Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
+        }
+    }
+
+    /// Assert is None
+    fn to_be_none(&self, py: Python<'_>) -> PyResult<()> {
+        let result = self.value.bind(py).is_none();
+        let passed = if self.negated { !result } else { result };
+
+        if passed {
+            Ok(())
+        } else {
+            let msg = if self.negated {
+                "Expected value to NOT be None".to_string()
+            } else {
+                format!("Expected None, but got {:?}", self.value)
+            };
+            Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
+        }
+    }
+
+    /// Assert greater than
+    fn to_be_greater_than(&self, py: Python<'_>, expected: PyObject) -> PyResult<()> {
+        let result = self.value.bind(py).gt(expected.bind(py))?;
+        let passed = if self.negated { !result } else { result };
+
+        if passed {
+            Ok(())
+        } else {
+            let msg = if self.negated {
+                format!("Expected {:?} to NOT be greater than {:?}", self.value, expected)
+            } else {
+                format!("Expected {:?} to be greater than {:?}", self.value, expected)
+            };
+            Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
+        }
+    }
+
+    /// Assert less than
+    fn to_be_less_than(&self, py: Python<'_>, expected: PyObject) -> PyResult<()> {
+        let result = self.value.bind(py).lt(expected.bind(py))?;
+        let passed = if self.negated { !result } else { result };
+
+        if passed {
+            Ok(())
+        } else {
+            let msg = if self.negated {
+                format!("Expected {:?} to NOT be less than {:?}", self.value, expected)
+            } else {
+                format!("Expected {:?} to be less than {:?}", self.value, expected)
+            };
+            Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
+        }
+    }
+
+    /// Assert contains
+    fn to_contain(&self, py: Python<'_>, item: PyObject) -> PyResult<()> {
+        let bound_value = self.value.bind(py);
+        let bound_item = item.bind(py);
+        let result = bound_value.contains(bound_item)?;
+        let passed = if self.negated { !result } else { result };
+
+        if passed {
+            Ok(())
+        } else {
+            let msg = if self.negated {
+                format!("Expected {:?} to NOT contain {:?}", self.value, item)
+            } else {
+                format!("Expected {:?} to contain {:?}", self.value, item)
+            };
+            Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
+        }
+    }
+
+    /// Assert has key (for dicts)
+    fn to_have_key(&self, py: Python<'_>, key: PyObject) -> PyResult<()> {
+        let bound_value = self.value.bind(py);
+
+        // Try to access as dict
+        let result = if let Ok(dict) = bound_value.downcast::<PyDict>() {
+            dict.contains(&key)?
+        } else {
+            // Try __contains__ method
+            bound_value.contains(&key)?
+        };
+
+        let passed = if self.negated { !result } else { result };
+
+        if passed {
+            Ok(())
+        } else {
+            let msg = if self.negated {
+                format!("Expected {:?} to NOT have key {:?}", self.value, key)
+            } else {
+                format!("Expected {:?} to have key {:?}", self.value, key)
+            };
+            Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
+        }
+    }
+
+    /// Assert length
+    fn to_have_length(&self, py: Python<'_>, expected_len: usize) -> PyResult<()> {
+        let bound_value = self.value.bind(py);
+        let actual_len = bound_value.len()?;
+        let result = actual_len == expected_len;
+        let passed = if self.negated { !result } else { result };
+
+        if passed {
+            Ok(())
+        } else {
+            let msg = if self.negated {
+                format!("Expected length to NOT be {}, but got {}", expected_len, actual_len)
+            } else {
+                format!("Expected length {}, but got {}", expected_len, actual_len)
+            };
+            Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
+        }
+    }
+
+    /// Assert empty
+    fn to_be_empty(&self, py: Python<'_>) -> PyResult<()> {
+        let bound_value = self.value.bind(py);
+        let result = bound_value.len()? == 0;
+        let passed = if self.negated { !result } else { result };
+
+        if passed {
+            Ok(())
+        } else {
+            let msg = if self.negated {
+                "Expected value to NOT be empty".to_string()
+            } else {
+                format!("Expected empty value, but got length {}", bound_value.len()?)
+            };
+            Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
+        }
+    }
+
+    /// Assert starts with (for strings)
+    fn to_start_with(&self, py: Python<'_>, prefix: &str) -> PyResult<()> {
+        let bound_value = self.value.bind(py);
+        let s: String = bound_value.extract()?;
+        let result = s.starts_with(prefix);
+        let passed = if self.negated { !result } else { result };
+
+        if passed {
+            Ok(())
+        } else {
+            let msg = if self.negated {
+                format!("Expected '{}' to NOT start with '{}'", s, prefix)
+            } else {
+                format!("Expected '{}' to start with '{}'", s, prefix)
+            };
+            Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
+        }
+    }
+
+    /// Assert ends with (for strings)
+    fn to_end_with(&self, py: Python<'_>, suffix: &str) -> PyResult<()> {
+        let bound_value = self.value.bind(py);
+        let s: String = bound_value.extract()?;
+        let result = s.ends_with(suffix);
+        let passed = if self.negated { !result } else { result };
+
+        if passed {
+            Ok(())
+        } else {
+            let msg = if self.negated {
+                format!("Expected '{}' to NOT end with '{}'", s, suffix)
+            } else {
+                format!("Expected '{}' to end with '{}'", s, suffix)
+            };
+            Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
+        }
+    }
+
+    /// Assert matches regex
+    fn to_match(&self, py: Python<'_>, pattern: &str) -> PyResult<()> {
+        let bound_value = self.value.bind(py);
+        let s: String = bound_value.extract()?;
+
+        let regex = regex::Regex::new(pattern)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid regex: {}", e)))?;
+
+        let result = regex.is_match(&s);
+        let passed = if self.negated { !result } else { result };
+
+        if passed {
+            Ok(())
+        } else {
+            let msg = if self.negated {
+                format!("Expected '{}' to NOT match pattern '{}'", s, pattern)
+            } else {
+                format!("Expected '{}' to match pattern '{}'", s, pattern)
+            };
+            Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
+        }
+    }
+}
+
+/// Create an expectation from a value
+#[pyfunction]
+fn expect(value: PyObject) -> PyExpectation {
+    PyExpectation::new(value)
+}
+
+// =====================
+// Reporter
+// =====================
+
+/// Python Reporter class
+#[pyclass(name = "Reporter")]
+pub struct PyReporter {
+    inner: Reporter,
+}
+
+#[pymethods]
+impl PyReporter {
+    /// Create a new reporter
+    #[new]
+    #[pyo3(signature = (format = PyReportFormat::Markdown))]
+    fn new(format: PyReportFormat) -> Self {
+        Self {
+            inner: Reporter::new(format.into()),
+        }
+    }
+
+    /// Create markdown reporter
+    #[staticmethod]
+    fn markdown() -> Self {
+        Self {
+            inner: Reporter::markdown(),
+        }
+    }
+
+    /// Create HTML reporter
+    #[staticmethod]
+    fn html() -> Self {
+        Self {
+            inner: Reporter::html(),
+        }
+    }
+
+    /// Create JSON reporter
+    #[staticmethod]
+    fn json() -> Self {
+        Self {
+            inner: Reporter::json(),
+        }
+    }
+
+    /// Create JUnit reporter
+    #[staticmethod]
+    fn junit() -> Self {
+        Self {
+            inner: Reporter::junit(),
+        }
+    }
+
+    /// Generate report string
+    fn generate(&self, report: &PyTestReport) -> String {
+        self.inner.generate(&report.inner)
+    }
+}
+
+// =====================
+// TestReport
+// =====================
+
+/// Python TestReport class
+#[pyclass(name = "TestReport")]
+#[derive(Clone)]
+pub struct PyTestReport {
+    inner: TestReport,
+}
+
+#[pymethods]
+impl PyTestReport {
+    /// Create a new test report
+    #[new]
+    fn new(suite_name: String, results: Vec<PyTestResult>) -> Self {
+        let rust_results: Vec<TestResult> = results.iter().map(|r| r.inner.clone()).collect();
+        Self {
+            inner: TestReport::new(suite_name, rust_results),
+        }
+    }
+
+    /// Suite name
+    #[getter]
+    fn suite_name(&self) -> &str {
+        &self.inner.suite_name
+    }
+
+    /// Generated timestamp
+    #[getter]
+    fn generated_at(&self) -> &str {
+        &self.inner.generated_at
+    }
+
+    /// Duration in milliseconds
+    #[getter]
+    fn duration_ms(&self) -> u64 {
+        self.inner.duration_ms
+    }
+
+    /// Summary
+    #[getter]
+    fn summary(&self) -> PyTestSummary {
+        PyTestSummary {
+            inner: self.inner.summary.clone(),
+        }
+    }
+
+    /// All results
+    #[getter]
+    fn results(&self) -> Vec<PyTestResult> {
+        self.inner
+            .results
+            .iter()
+            .map(|r| PyTestResult { inner: r.clone() })
+            .collect()
+    }
+
+    /// Get results by test type
+    fn results_by_type(&self, test_type: PyTestType) -> Vec<PyTestResult> {
+        self.inner
+            .results_by_type(test_type.into())
+            .into_iter()
+            .map(|r| PyTestResult { inner: r.clone() })
+            .collect()
+    }
+
+    /// Get failed results
+    fn failed_results(&self) -> Vec<PyTestResult> {
+        self.inner
+            .failed_results()
+            .into_iter()
+            .map(|r| PyTestResult { inner: r.clone() })
+            .collect()
+    }
+
+    /// Set environment info
+    fn set_environment(
+        &mut self,
+        python_version: Option<String>,
+        rust_version: Option<String>,
+        platform: Option<String>,
+        hostname: Option<String>,
+    ) {
+        self.inner.environment = EnvironmentInfo {
+            python_version,
+            rust_version,
+            platform,
+            hostname,
+        };
+    }
+
+    /// Set coverage info
+    fn set_coverage(&mut self, coverage: &PyCoverageInfo) {
+        self.inner.set_coverage(coverage.inner.clone());
+    }
+
+    /// Get coverage info
+    #[getter]
+    fn coverage(&self) -> Option<PyCoverageInfo> {
+        self.inner.coverage.as_ref().map(|c| PyCoverageInfo { inner: c.clone() })
+    }
+}
+
+// =====================
+// Coverage Info
+// =====================
+
+/// Python FileCoverage class - coverage info for a single file
+#[pyclass(name = "FileCoverage")]
+#[derive(Clone)]
+pub struct PyFileCoverage {
+    inner: FileCoverage,
+}
+
+#[pymethods]
+impl PyFileCoverage {
+    #[new]
+    fn new(
+        path: String,
+        statements: usize,
+        covered: usize,
+        missing_lines: Vec<usize>,
+    ) -> Self {
+        let coverage_percent = if statements > 0 {
+            (covered as f64 / statements as f64) * 100.0
+        } else {
+            0.0
+        };
+        Self {
+            inner: FileCoverage {
+                path,
+                statements,
+                covered,
+                missing_lines,
+                coverage_percent,
+            },
+        }
+    }
+
+    #[getter]
+    fn path(&self) -> &str {
+        &self.inner.path
+    }
+
+    #[getter]
+    fn statements(&self) -> usize {
+        self.inner.statements
+    }
+
+    #[getter]
+    fn covered(&self) -> usize {
+        self.inner.covered
+    }
+
+    #[getter]
+    fn missing_lines(&self) -> Vec<usize> {
+        self.inner.missing_lines.clone()
+    }
+
+    #[getter]
+    fn coverage_percent(&self) -> f64 {
+        self.inner.coverage_percent
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "FileCoverage(path='{}', coverage={:.1}%, {}/{})",
+            self.inner.path, self.inner.coverage_percent, self.inner.covered, self.inner.statements
+        )
+    }
+}
+
+/// Python CoverageInfo class - overall coverage summary
+#[pyclass(name = "CoverageInfo")]
+#[derive(Clone)]
+pub struct PyCoverageInfo {
+    inner: CoverageInfo,
+}
+
+#[pymethods]
+impl PyCoverageInfo {
+    #[new]
+    #[pyo3(signature = (total_statements = 0, covered_statements = 0, files = None, uncovered_files = None))]
+    fn new(
+        total_statements: usize,
+        covered_statements: usize,
+        files: Option<Vec<PyFileCoverage>>,
+        uncovered_files: Option<Vec<String>>,
+    ) -> Self {
+        let coverage_percent = if total_statements > 0 {
+            (covered_statements as f64 / total_statements as f64) * 100.0
+        } else {
+            0.0
+        };
+        Self {
+            inner: CoverageInfo {
+                total_statements,
+                covered_statements,
+                coverage_percent,
+                files: files.map(|f| f.into_iter().map(|fc| fc.inner).collect()).unwrap_or_default(),
+                uncovered_files: uncovered_files.unwrap_or_default(),
+            },
+        }
+    }
+
+    #[getter]
+    fn total_statements(&self) -> usize {
+        self.inner.total_statements
+    }
+
+    #[getter]
+    fn covered_statements(&self) -> usize {
+        self.inner.covered_statements
+    }
+
+    #[getter]
+    fn coverage_percent(&self) -> f64 {
+        self.inner.coverage_percent
+    }
+
+    #[getter]
+    fn files(&self) -> Vec<PyFileCoverage> {
+        self.inner.files.iter().map(|f| PyFileCoverage { inner: f.clone() }).collect()
+    }
+
+    #[getter]
+    fn uncovered_files(&self) -> Vec<String> {
+        self.inner.uncovered_files.clone()
+    }
+
+    /// Add file coverage
+    fn add_file(&mut self, file: &PyFileCoverage) {
+        self.inner.files.push(file.inner.clone());
+        // Recalculate totals
+        self.inner.total_statements += file.inner.statements;
+        self.inner.covered_statements += file.inner.covered;
+        self.inner.coverage_percent = if self.inner.total_statements > 0 {
+            (self.inner.covered_statements as f64 / self.inner.total_statements as f64) * 100.0
+        } else {
+            0.0
+        };
+    }
+
+    /// Add uncovered file
+    fn add_uncovered_file(&mut self, path: String) {
+        self.inner.uncovered_files.push(path);
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "CoverageInfo({:.1}%, {}/{} statements, {} files)",
+            self.inner.coverage_percent,
+            self.inner.covered_statements,
+            self.inner.total_statements,
+            self.inner.files.len()
+        )
+    }
+}
+
+// =====================
+// Benchmark
+// =====================
+
+/// Python BenchmarkStats class
+#[pyclass(name = "BenchmarkStats")]
+#[derive(Clone)]
+pub struct PyBenchmarkStats {
+    inner: BenchmarkStats,
+}
+
+#[pymethods]
+impl PyBenchmarkStats {
+    /// Number of iterations per round
+    #[getter]
+    fn iterations(&self) -> u32 {
+        self.inner.iterations
+    }
+
+    /// Number of rounds
+    #[getter]
+    fn rounds(&self) -> u32 {
+        self.inner.rounds
+    }
+
+    /// Number of warmup iterations
+    #[getter]
+    fn warmup(&self) -> u32 {
+        self.inner.warmup
+    }
+
+    /// Total number of timed runs
+    #[getter]
+    fn total_runs(&self) -> u32 {
+        self.inner.total_runs
+    }
+
+    /// Mean time per operation (ms)
+    #[getter]
+    fn mean_ms(&self) -> f64 {
+        self.inner.mean_ms
+    }
+
+    /// Minimum time observed (ms)
+    #[getter]
+    fn min_ms(&self) -> f64 {
+        self.inner.min_ms
+    }
+
+    /// Maximum time observed (ms)
+    #[getter]
+    fn max_ms(&self) -> f64 {
+        self.inner.max_ms
+    }
+
+    /// Standard deviation (ms)
+    #[getter]
+    fn stddev_ms(&self) -> f64 {
+        self.inner.stddev_ms
+    }
+
+    /// Median time (ms)
+    #[getter]
+    fn median_ms(&self) -> f64 {
+        self.inner.median_ms
+    }
+
+    /// Total time for all runs (ms)
+    #[getter]
+    fn total_ms(&self) -> f64 {
+        self.inner.total_ms
+    }
+
+    /// All individual timings (ms)
+    #[getter]
+    fn all_times_ms(&self) -> Vec<f64> {
+        self.inner.all_times_ms.clone()
+    }
+
+    // Percentiles
+    /// 25th percentile (Q1)
+    #[getter]
+    fn p25_ms(&self) -> f64 {
+        self.inner.p25_ms
+    }
+
+    /// 75th percentile (Q3)
+    #[getter]
+    fn p75_ms(&self) -> f64 {
+        self.inner.p75_ms
+    }
+
+    /// 95th percentile
+    #[getter]
+    fn p95_ms(&self) -> f64 {
+        self.inner.p95_ms
+    }
+
+    /// 99th percentile
+    #[getter]
+    fn p99_ms(&self) -> f64 {
+        self.inner.p99_ms
+    }
+
+    // Outlier detection
+    /// Interquartile range (Q3 - Q1)
+    #[getter]
+    fn iqr_ms(&self) -> f64 {
+        self.inner.iqr_ms
+    }
+
+    /// Total number of outliers
+    #[getter]
+    fn outliers(&self) -> u32 {
+        self.inner.outliers
+    }
+
+    /// Outliers below Q1 - 1.5*IQR
+    #[getter]
+    fn outliers_low(&self) -> u32 {
+        self.inner.outliers_low
+    }
+
+    /// Outliers above Q3 + 1.5*IQR
+    #[getter]
+    fn outliers_high(&self) -> u32 {
+        self.inner.outliers_high
+    }
+
+    // Confidence interval
+    /// Standard error (stddev / sqrt(n))
+    #[getter]
+    fn std_error_ms(&self) -> f64 {
+        self.inner.std_error_ms
+    }
+
+    /// 95% CI lower bound
+    #[getter]
+    fn ci_lower_ms(&self) -> f64 {
+        self.inner.ci_lower_ms
+    }
+
+    /// 95% CI upper bound
+    #[getter]
+    fn ci_upper_ms(&self) -> f64 {
+        self.inner.ci_upper_ms
+    }
+
+    /// Calculate operations per second
+    fn ops_per_second(&self) -> f64 {
+        self.inner.ops_per_second()
+    }
+
+    /// Format stats as human-readable string
+    fn format(&self) -> String {
+        self.inner.format()
+    }
+
+    /// Format stats as short single-line summary
+    fn format_short(&self) -> String {
+        self.inner.format_short()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "BenchmarkStats(mean={:.3}ms ± {:.3}ms, P50={:.3}ms, P95={:.3}ms, outliers={})",
+            self.inner.mean_ms, self.inner.stddev_ms, self.inner.median_ms,
+            self.inner.p95_ms, self.inner.outliers
+        )
+    }
+}
+
+/// Python BenchmarkResult class
+#[pyclass(name = "BenchmarkResult")]
+#[derive(Clone)]
+pub struct PyBenchmarkResult {
+    inner: BenchmarkResult,
+}
+
+#[pymethods]
+impl PyBenchmarkResult {
+    /// Create a new benchmark result from collected times
+    #[staticmethod]
+    #[pyo3(signature = (name, times_ms, iterations = 20, rounds = 3, warmup = 3))]
+    fn from_times(
+        name: String,
+        times_ms: Vec<f64>,
+        iterations: u32,
+        rounds: u32,
+        warmup: u32,
+    ) -> Self {
+        let stats = BenchmarkStats::from_times(times_ms, iterations, rounds, warmup);
+        Self {
+            inner: BenchmarkResult::success(name, stats),
+        }
+    }
+
+    /// Create a failed benchmark result
+    #[staticmethod]
+    fn failure(name: String, error: String) -> Self {
+        Self {
+            inner: BenchmarkResult::failure(name, error),
+        }
+    }
+
+    /// Name of this benchmark
+    #[getter]
+    fn name(&self) -> &str {
+        &self.inner.name
+    }
+
+    /// Timing statistics
+    #[getter]
+    fn stats(&self) -> PyBenchmarkStats {
+        PyBenchmarkStats {
+            inner: self.inner.stats.clone(),
+        }
+    }
+
+    /// Whether benchmark completed successfully
+    #[getter]
+    fn success(&self) -> bool {
+        self.inner.success
+    }
+
+    /// Error message if failed
+    #[getter]
+    fn error(&self) -> Option<&str> {
+        self.inner.error.as_deref()
+    }
+
+    /// Format result as human-readable string
+    fn format(&self) -> String {
+        self.inner.format()
+    }
+
+    /// Print detailed statistics to stdout
+    ///
+    /// Formats output with Mean ± SE, Median, P95/P99, IQR, Outliers, Ops/s
+    fn print_detailed(&self) {
+        self.inner.print_detailed();
+    }
+
+    fn __repr__(&self) -> String {
+        if self.inner.success {
+            format!(
+                "BenchmarkResult(name='{}', mean={:.3}ms, ops/s={:.1})",
+                self.inner.name,
+                self.inner.stats.mean_ms,
+                self.inner.stats.ops_per_second()
+            )
+        } else {
+            format!(
+                "BenchmarkResult(name='{}', FAILED: {})",
+                self.inner.name,
+                self.inner.error.as_deref().unwrap_or("unknown")
+            )
+        }
+    }
+}
+
+/// Python BenchmarkConfig class
+#[pyclass(name = "BenchmarkConfig")]
+#[derive(Clone)]
+pub struct PyBenchmarkConfig {
+    inner: BenchmarkConfig,
+}
+
+#[pymethods]
+impl PyBenchmarkConfig {
+    /// Create a new benchmark configuration
+    #[new]
+    #[pyo3(signature = (iterations = 20, rounds = 3, warmup = 3))]
+    fn new(iterations: u32, rounds: u32, warmup: u32) -> Self {
+        Self {
+            inner: BenchmarkConfig::new(iterations, rounds, warmup),
+        }
+    }
+
+    /// Create a quick benchmark configuration
+    #[staticmethod]
+    fn quick() -> Self {
+        Self {
+            inner: BenchmarkConfig::quick(),
+        }
+    }
+
+    /// Create a thorough benchmark configuration
+    #[staticmethod]
+    fn thorough() -> Self {
+        Self {
+            inner: BenchmarkConfig::thorough(),
+        }
+    }
+
+    /// Create a calibrated benchmark configuration
+    ///
+    /// Automatically determines optimal iterations based on sample timing.
+    ///
+    /// # Arguments
+    /// * `sample_time_ms` - Time for a single operation in milliseconds
+    /// * `target_time_ms` - Target total time (default: 100ms)
+    #[staticmethod]
+    #[pyo3(signature = (sample_time_ms, target_time_ms = 100.0))]
+    fn calibrated(sample_time_ms: f64, target_time_ms: f64) -> Self {
+        Self {
+            inner: BenchmarkConfig::calibrated(sample_time_ms, target_time_ms),
+        }
+    }
+
+    /// Number of iterations per round
+    #[getter]
+    fn iterations(&self) -> u32 {
+        self.inner.iterations
+    }
+
+    /// Number of rounds
+    #[getter]
+    fn rounds(&self) -> u32 {
+        self.inner.rounds
+    }
+
+    /// Number of warmup iterations
+    #[getter]
+    fn warmup(&self) -> u32 {
+        self.inner.warmup
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "BenchmarkConfig(iterations={}, rounds={}, warmup={})",
+            self.inner.iterations, self.inner.rounds, self.inner.warmup
+        )
+    }
+}
+
+/// Compare multiple benchmark results and return formatted comparison
+#[pyfunction]
+#[pyo3(signature = (results, baseline_name = None))]
+fn compare_benchmarks(results: Vec<PyBenchmarkResult>, baseline_name: Option<&str>) -> String {
+    let rust_results: Vec<BenchmarkResult> = results.iter().map(|r| r.inner.clone()).collect();
+    data_bridge_test::benchmark::compare_results(&rust_results, baseline_name)
+}
+
+/// Print a comparison table to stdout with enhanced statistics
+///
+/// Output format:
+/// ```text
+/// Benchmark        Mean       P50       P95       P99   Outliers     vs Base
+/// --------------------------------------------------------------------------------
+/// data-bridge    1.234ms   1.200ms   1.500ms   1.800ms          2   (baseline)
+/// httpx          2.345ms   2.300ms   2.800ms   3.100ms          1   1.90x slower
+/// ```
+#[pyfunction]
+#[pyo3(signature = (results, baseline_name = None))]
+fn print_comparison_table(results: Vec<PyBenchmarkResult>, baseline_name: Option<&str>) {
+    let rust_results: Vec<BenchmarkResult> = results.iter().map(|r| r.inner.clone()).collect();
+    data_bridge_test::benchmark::print_comparison_table(&rust_results, baseline_name);
+}
+
+// =====================
+// Benchmark Report
+// =====================
+
+/// Python BenchmarkEnvironment class
+#[pyclass(name = "BenchmarkEnvironment")]
+#[derive(Clone)]
+pub struct PyBenchmarkEnvironment {
+    inner: BenchmarkEnvironment,
+}
+
+#[pymethods]
+impl PyBenchmarkEnvironment {
+    #[new]
+    #[pyo3(signature = (python_version = None, rust_version = None, platform = None, cpu = None, hostname = None))]
+    fn new(
+        python_version: Option<String>,
+        rust_version: Option<String>,
+        platform: Option<String>,
+        cpu: Option<String>,
+        hostname: Option<String>,
+    ) -> Self {
+        Self {
+            inner: BenchmarkEnvironment {
+                python_version,
+                rust_version,
+                platform,
+                cpu,
+                hostname,
+            },
+        }
+    }
+
+    #[getter]
+    fn python_version(&self) -> Option<&str> { self.inner.python_version.as_deref() }
+    #[getter]
+    fn rust_version(&self) -> Option<&str> { self.inner.rust_version.as_deref() }
+    #[getter]
+    fn platform(&self) -> Option<&str> { self.inner.platform.as_deref() }
+    #[getter]
+    fn cpu(&self) -> Option<&str> { self.inner.cpu.as_deref() }
+    #[getter]
+    fn hostname(&self) -> Option<&str> { self.inner.hostname.as_deref() }
+}
+
+/// Python BenchmarkReportGroup class
+#[pyclass(name = "BenchmarkReportGroup")]
+#[derive(Clone)]
+pub struct PyBenchmarkReportGroup {
+    inner: BenchmarkReportGroup,
+}
+
+#[pymethods]
+impl PyBenchmarkReportGroup {
+    #[new]
+    #[pyo3(signature = (name, baseline = None))]
+    fn new(name: String, baseline: Option<String>) -> Self {
+        let mut group = BenchmarkReportGroup::new(name);
+        if let Some(b) = baseline {
+            group = group.with_baseline(b);
+        }
+        Self { inner: group }
+    }
+
+    #[getter]
+    fn name(&self) -> &str { &self.inner.name }
+
+    #[getter]
+    fn baseline(&self) -> Option<&str> { self.inner.baseline.as_deref() }
+
+    #[getter]
+    fn results(&self) -> Vec<PyBenchmarkResult> {
+        self.inner.results.iter().map(|r| PyBenchmarkResult { inner: r.clone() }).collect()
+    }
+
+    /// Add a result to this group
+    fn add_result(&mut self, result: &PyBenchmarkResult) {
+        self.inner.add_result(result.inner.clone());
+    }
+}
+
+/// Python BenchmarkReport class
+#[pyclass(name = "BenchmarkReport")]
+#[derive(Clone)]
+pub struct PyBenchmarkReport {
+    inner: BenchmarkReport,
+}
+
+#[pymethods]
+impl PyBenchmarkReport {
+    #[new]
+    #[pyo3(signature = (title, description = None))]
+    fn new(title: String, description: Option<String>) -> Self {
+        let mut report = BenchmarkReport::new(title);
+        if let Some(desc) = description {
+            report = report.with_description(desc);
+        }
+        Self { inner: report }
+    }
+
+    #[getter]
+    fn title(&self) -> &str { &self.inner.title }
+
+    #[getter]
+    fn description(&self) -> Option<&str> { self.inner.description.as_deref() }
+
+    #[getter]
+    fn generated_at(&self) -> &str { &self.inner.generated_at }
+
+    #[getter]
+    fn total_duration_ms(&self) -> f64 { self.inner.total_duration_ms }
+
+    #[getter]
+    fn groups(&self) -> Vec<PyBenchmarkReportGroup> {
+        self.inner.groups.iter().map(|g| PyBenchmarkReportGroup { inner: g.clone() }).collect()
+    }
+
+    /// Add a benchmark group
+    fn add_group(&mut self, group: &PyBenchmarkReportGroup) {
+        self.inner.add_group(group.inner.clone());
+    }
+
+    /// Set environment info
+    fn set_environment(&mut self, env: &PyBenchmarkEnvironment) {
+        self.inner.set_environment(env.inner.clone());
+    }
+
+    /// Generate JSON report
+    fn to_json(&self) -> String {
+        self.inner.to_json()
+    }
+
+    /// Generate HTML report with charts
+    fn to_html(&self) -> String {
+        self.inner.to_html()
+    }
+
+    /// Generate Markdown report
+    fn to_markdown(&self) -> String {
+        self.inner.to_markdown()
+    }
+
+    /// Generate YAML report
+    fn to_yaml(&self) -> String {
+        self.inner.to_yaml()
+    }
+
+    /// Generate console output with ANSI colors
+    fn to_console(&self) -> String {
+        self.inner.to_console()
+    }
+
+    /// Save report to file
+    fn save(&self, path: &str, format: &str) -> PyResult<()> {
+        let content = match format {
+            "html" => self.inner.to_html(),
+            "json" => self.inner.to_json(),
+            "yaml" | "yml" => self.inner.to_yaml(),
+            "markdown" | "md" => self.inner.to_markdown(),
+            "console" => self.inner.to_console(),
+            _ => return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                format!("Unknown format: {}. Use 'html', 'json', 'yaml', 'markdown', or 'console'", format)
+            )),
+        };
+
+        std::fs::write(path, content)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))
+    }
+}
+
+// =====================
+// Test Server
+// =====================
+
+use data_bridge_test::http_server::{TestServer, TestServerHandle};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+/// Python wrapper for TestServerHandle
+#[pyclass(name = "TestServerHandle")]
+pub struct PyTestServerHandle {
+    url: String,
+    port: u16,
+    handle: Arc<Mutex<Option<TestServerHandle>>>,
+}
+
+#[pymethods]
+impl PyTestServerHandle {
+    /// Get the base URL for this server
+    #[getter]
+    fn url(&self) -> &str {
+        &self.url
+    }
+
+    /// Get the port number
+    #[getter]
+    fn port(&self) -> u16 {
+        self.port
+    }
+
+    /// Stop the server
+    fn stop(&self) -> PyResult<()> {
+        let handle = self.handle.clone();
+        pyo3_async_runtimes::tokio::get_runtime().block_on(async move {
+            let mut guard = handle.lock().await;
+            if let Some(h) = guard.take() {
+                h.stop();
+            }
+        });
+        Ok(())
+    }
+
+    fn __repr__(&self) -> String {
+        format!("TestServerHandle(url='{}', port={})", self.url, self.port)
+    }
+}
+
+/// Python TestServer class for creating test HTTP servers
+#[pyclass(name = "TestServer")]
+pub struct PyTestServer {
+    routes: std::collections::HashMap<String, serde_json::Value>,
+    port: Option<u16>,
+}
+
+#[pymethods]
+impl PyTestServer {
+    /// Create a new test server
+    #[new]
+    fn new() -> Self {
+        Self {
+            routes: std::collections::HashMap::new(),
+            port: None,
+        }
+    }
+
+    /// Set the port to listen on
+    fn port(&mut self, port: u16) {
+        self.port = Some(port);
+    }
+
+    /// Add a GET route with JSON response
+    fn get(&mut self, path: &str, response: &Bound<'_, pyo3::types::PyAny>) -> PyResult<()> {
+        let json_value = python_to_json(response)?;
+        self.routes.insert(path.to_string(), json_value);
+        Ok(())
+    }
+
+    /// Add multiple routes from a dict
+    fn routes(&mut self, routes: &Bound<'_, pyo3::types::PyDict>) -> PyResult<()> {
+        for (key, value) in routes.iter() {
+            let path: String = key.extract()?;
+            let json_value = python_to_json(&value)?;
+            self.routes.insert(path, json_value);
+        }
+        Ok(())
+    }
+
+    /// Start the server (async)
+    fn start<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, pyo3::types::PyAny>> {
+        let routes = self.routes.clone();
+        let port = self.port;
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let mut builder = TestServer::new();
+
+            if let Some(p) = port {
+                builder = builder.port(p);
+            }
+
+            for (path, response) in routes {
+                builder = builder.get(&path, response);
+            }
+
+            let handle = builder.start().await
+                .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+            let url = handle.url.clone();
+            let port = handle.port;
+
+            Ok(PyTestServerHandle {
+                url,
+                port,
+                handle: Arc::new(Mutex::new(Some(handle))),
+            })
+        })
+    }
+
+    fn __repr__(&self) -> String {
+        format!("TestServer(routes={}, port={:?})", self.routes.len(), self.port)
+    }
+}
+
+/// Convert Python object to serde_json::Value
+fn python_to_json(obj: &Bound<'_, pyo3::types::PyAny>) -> PyResult<serde_json::Value> {
+    // Try to convert via JSON string (simple approach)
+    let json_module = obj.py().import("json")?;
+    let json_str: String = json_module.call_method1("dumps", (obj,))?.extract()?;
+    serde_json::from_str(&json_str)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+}
+
+// =====================
+// Module registration
+// =====================
+
+/// Register test module classes and functions
+pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Enums
+    m.add_class::<PyTestType>()?;
+    m.add_class::<PyTestStatus>()?;
+    m.add_class::<PyReportFormat>()?;
+
+    // Core types
+    m.add_class::<PyTestMeta>()?;
+    m.add_class::<PyTestResult>()?;
+    m.add_class::<PyTestSummary>()?;
+    m.add_class::<PyTestRunner>()?;
+
+    // Assertions
+    m.add_class::<PyExpectation>()?;
+    m.add_function(wrap_pyfunction!(expect, m)?)?;
+
+    // Reporter
+    m.add_class::<PyReporter>()?;
+    m.add_class::<PyTestReport>()?;
+
+    // Coverage
+    m.add_class::<PyFileCoverage>()?;
+    m.add_class::<PyCoverageInfo>()?;
+
+    // Benchmark
+    m.add_class::<PyBenchmarkStats>()?;
+    m.add_class::<PyBenchmarkResult>()?;
+    m.add_class::<PyBenchmarkConfig>()?;
+    m.add_function(wrap_pyfunction!(compare_benchmarks, m)?)?;
+    m.add_function(wrap_pyfunction!(print_comparison_table, m)?)?;
+
+    // Benchmark Report
+    m.add_class::<PyBenchmarkEnvironment>()?;
+    m.add_class::<PyBenchmarkReportGroup>()?;
+    m.add_class::<PyBenchmarkReport>()?;
+
+    // Test Server
+    m.add_class::<PyTestServer>()?;
+    m.add_class::<PyTestServerHandle>()?;
+
+    Ok(())
+}

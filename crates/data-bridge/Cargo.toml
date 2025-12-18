@@ -1,0 +1,47 @@
+[package]
+name = "data-bridge"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[lib]
+name = "data_bridge"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3.workspace = true
+pyo3-async-runtimes.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+futures.workspace = true
+bson.workspace = true
+mongodb.workspace = true
+regex.workspace = true
+rayon.workspace = true
+once_cell.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+pythonize.workspace = true
+
+# Optional feature-gated dependencies
+data-bridge-mongodb = { path = "../data-bridge-mongodb", optional = true }
+data-bridge-http = { path = "../data-bridge-http", optional = true }
+data-bridge-test = { path = "../data-bridge-test", optional = true }
+data-bridge-common = { path = "../data-bridge-common" }
+
+[features]
+default = ["mongodb", "http", "test"]
+mongodb = ["data-bridge-mongodb"]
+http = ["data-bridge-http"]
+test = ["data-bridge-test"]
+# Future features
+# redis = ["data-bridge-redis"]
+# postgres = ["data-bridge-postgres"]
+# rabbitmq = ["data-bridge-rabbitmq"]
+# nats = ["data-bridge-nats"]
