@@ -34,7 +34,43 @@ clean:
     find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
 
 # ============================================================================
-# TEST COMMANDS
+# DBTEST COMMANDS (Primary Test & Benchmark Runner)
+# ============================================================================
+
+# Run all tests and benchmarks (auto-discovers tests/*)
+test:
+    uv run dbtest
+
+# Run unit tests only
+test-unit:
+    uv run dbtest unit
+
+# Run integration tests only
+test-integration:
+    uv run dbtest integration
+
+# Run all benchmarks (auto-discovers bench_*.py)
+bench:
+    uv run dbtest bench
+
+# Run with verbose output
+test-verbose:
+    uv run dbtest --verbose
+
+# Run with pattern filter
+test-pattern PATTERN:
+    uv run dbtest --pattern "{{PATTERN}}"
+
+# Run with fail-fast mode
+test-fail-fast:
+    uv run dbtest --fail-fast
+
+# Run tests with custom format (console/json/markdown)
+test-format FORMAT:
+    uv run dbtest --format {{FORMAT}}
+
+# ============================================================================
+# RUST TEST COMMANDS
 # ============================================================================
 
 # Run all Rust tests
@@ -45,52 +81,8 @@ test-rust:
 test-rust-crate CRATE:
     cargo test -p {{CRATE}}
 
-# Run all Python tests (requires MongoDB)
-test-python:
-    uv run pytest tests/ -v
-
-# Run Python unit tests only (no MongoDB required)
-test-unit:
-    uv run pytest tests/unit/ -v
-
-# Run Python integration tests (requires MongoDB)
-test-integration:
-    uv run pytest tests/integration/ tests/mongo/ -v
-
-# Run tests with coverage
-test-coverage:
-    uv run pytest --cov=data_bridge --cov-report=html --cov-report=term tests/
-
-# Run all tests (Rust + Python)
-test-all: test-rust test-python
-
-# ============================================================================
-# BENCHMARK COMMANDS
-# ============================================================================
-
-# Run insert benchmarks
-bench-insert:
-    MONGODB_URI="${MONGODB_BENCHMARK_URI}" uv run python -m tests.mongo.benchmarks bench_insert
-
-# Run find benchmarks
-bench-find:
-    MONGODB_URI="${MONGODB_BENCHMARK_URI}" uv run python -m tests.mongo.benchmarks bench_find
-
-# Run update benchmarks
-bench-update:
-    MONGODB_URI="${MONGODB_BENCHMARK_URI}" uv run python -m tests.mongo.benchmarks bench_update
-
-# Run all benchmarks
-bench-all:
-    MONGODB_URI="${MONGODB_BENCHMARK_URI}" uv run python -m tests.mongo.benchmarks
-
-# Run benchmark comparison (data-bridge vs Beanie vs PyMongo)
-bench-comparison:
-    MONGODB_URI="${MONGODB_COMPARISON_URI}" uv run python benchmarks/bench_comparison.py
-
-# Profile Python/Rust boundary overhead
-bench-profile:
-    MONGODB_URI="${MONGODB_PROFILE_URI}" uv run python tests/mongo/benchmarks/profile_overhead.py
+# Run all tests (Rust + Python via dbtest)
+test-all: test-rust test
 
 # ============================================================================
 # CODE QUALITY COMMANDS
@@ -136,7 +128,7 @@ mongo-clean:
     @python -c "import pymongo; c = pymongo.MongoClient('mongodb://localhost:27017/'); c.drop_database('data-bridge-test'); c.drop_database('data-bridge-benchmark'); c.drop_database('bench'); c.drop_database('bench_profile'); print('✓ Test databases dropped')"
 
 # ============================================================================
-# DEVELOPMENT WORKFLOW
+# DEVELOPMENT WORKFLOWS
 # ============================================================================
 
 # Full development build and test cycle
@@ -151,42 +143,9 @@ dev-quick: build test-rust test-unit
 pre-commit: fmt lint test-rust
     @echo "✓ Pre-commit checks passed"
 
-# Quick verification script for Feature 004 fast-path
-verify-004: build-release mongo-check
-    uv run python tests/mongo/benchmarks/verify_004_fast_path.py
-
-# Performance verification workflow for feature 004
-perf-004: build-release mongo-check bench-insert
-    @echo ""
-    @echo "==================================================================="
-    @echo "Feature 004 Performance Verification Complete"
-    @echo "==================================================================="
-    @echo "Review the benchmark results above."
-    @echo "Expected targets:"
-    @echo "  - insert_one (fast-path): <1.0ms (2x faster than Beanie)"
-    @echo "  - bulk_insert (fast-path): <15.0ms (3.9x faster than Beanie)"
-    @echo "==================================================================="
-
-# ============================================================================
-# FEATURE DEVELOPMENT WORKFLOWS (SDD)
-# ============================================================================
-
-# Create new feature spec (requires feature number and name)
-spec-new FEATURE:
-    @mkdir -p .specify/specs/{{FEATURE}}
-    @echo "Creating spec for feature: {{FEATURE}}"
-    @echo "Run: /speckit:specify to generate spec.md"
-
-# Run full SDD workflow for a feature
-sdd-workflow FEATURE: (spec-new FEATURE)
-    @echo "Starting SDD workflow for {{FEATURE}}"
-    @echo "Steps:"
-    @echo "1. Run /speckit:specify"
-    @echo "2. Run /speckit:plan"
-    @echo "3. Run /speckit:tasks"
-    @echo "4. Implement tasks"
-    @echo "5. Run: just test-all"
-    @echo "6. Run: just bench-all (if performance feature)"
+# Full CI workflow (build + lint + test + bench)
+ci: build-release check test-all bench
+    @echo "✓ CI checks complete"
 
 # ============================================================================
 # DOCUMENTATION
@@ -215,20 +174,22 @@ update-deps:
     cargo audit
 
 # ============================================================================
-# SPECKIT WORKFLOWS (for reference)
+# PROJECT SETUP & INFO
 # ============================================================================
 
-# Note: These are slash commands to run with Claude Code, not just commands
-# /speckit:specify     - Create feature specification
-# /speckit:plan        - Create implementation plan
-# /speckit:tasks       - Generate task breakdown
-# /speckit:implement   - Implement feature
-# /speckit:clarify     - Ask clarification questions
-# /speckit:analyze     - Analyze consistency
-
-# ============================================================================
-# HELPERS
-# ============================================================================
+# Install development dependencies
+setup:
+    @echo "Setting up development environment..."
+    @command -v rustup >/dev/null || (echo "Installing rustup..." && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh)
+    @command -v uv >/dev/null || (echo "Installing uv..." && curl -LsSf https://astral.sh/uv/install.sh | sh)
+    @command -v just >/dev/null || (echo "Installing just..." && cargo install just)
+    uv sync
+    @echo "✓ Development environment ready"
+    @echo ""
+    @echo "Next steps:"
+    @echo "  1. Start MongoDB: just mongo-start"
+    @echo "  2. Build project: just build-release"
+    @echo "  3. Run tests: just test"
 
 # Show project status
 status:
@@ -252,20 +213,6 @@ status:
     @git log -3 --oneline 2>/dev/null || echo "  No git history"
     @echo "==================================================================="
 
-# Install development dependencies
-setup:
-    @echo "Setting up development environment..."
-    @command -v rustup >/dev/null || (echo "Installing rustup..." && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh)
-    @command -v uv >/dev/null || (echo "Installing uv..." && curl -LsSf https://astral.sh/uv/install.sh | sh)
-    @command -v just >/dev/null || (echo "Installing just..." && cargo install just)
-    uv sync
-    @echo "✓ Development environment ready"
-    @echo ""
-    @echo "Next steps:"
-    @echo "  1. Start MongoDB: just mongo-start"
-    @echo "  2. Build project: just build-release"
-    @echo "  3. Run tests: just test-all"
-
 # Show environment info
 info:
     @echo "Build Configuration:"
@@ -278,5 +225,5 @@ info:
     @find crates -name "Cargo.toml" -exec echo "  {}" \;
     @echo ""
     @echo "Test Stats:"
-    @echo "  Python tests: $(find tests -name "test_*.py" | wc -l | tr -d ' ') files"
+    @echo "  Test files: $(find tests -name "test_*.py" -o -name "bench_*.py" | wc -l | tr -d ' ') files"
     @echo "  Rust tests: $(grep -r "#\[test\]" crates | wc -l | tr -d ' ') tests"
