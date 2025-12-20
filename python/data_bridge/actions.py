@@ -194,6 +194,25 @@ async def run_before_event(document: "Document", event: EventType) -> None:
         document: The document instance
         event: The event type
     """
+    # Fast path: Skip expensive iteration if no hooks exist
+    # Cache hook existence per class to avoid repeated dir() calls
+    doc_class = document.__class__
+    if not hasattr(doc_class, '_has_before_hooks_cache'):
+        # First time checking this class - scan for hooks
+        has_hooks = False
+        for method_name in dir(document):
+            if method_name.startswith("_"):
+                continue
+            method = getattr(document, method_name, None)
+            if method and callable(method) and hasattr(method, "_before_events"):
+                has_hooks = True
+                break
+        doc_class._has_before_hooks_cache = has_hooks
+
+    # Early return if no hooks registered for this class
+    if not doc_class._has_before_hooks_cache:
+        return
+
     # Collect handlers from class methods with decorators
     for method_name in dir(document):
         if method_name.startswith("_"):
@@ -217,6 +236,25 @@ async def run_after_event(document: "Document", event: EventType) -> None:
         document: The document instance
         event: The event type
     """
+    # Fast path: Skip expensive iteration if no hooks exist
+    # Cache hook existence per class to avoid repeated dir() calls
+    doc_class = document.__class__
+    if not hasattr(doc_class, '_has_after_hooks_cache'):
+        # First time checking this class - scan for hooks
+        has_hooks = False
+        for method_name in dir(document):
+            if method_name.startswith("_"):
+                continue
+            method = getattr(document, method_name, None)
+            if method and callable(method) and hasattr(method, "_after_events"):
+                has_hooks = True
+                break
+        doc_class._has_after_hooks_cache = has_hooks
+
+    # Early return if no hooks registered for this class
+    if not doc_class._has_after_hooks_cache:
+        return
+
     # Collect handlers from class methods with decorators
     for method_name in dir(document):
         if method_name.startswith("_"):

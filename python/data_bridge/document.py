@@ -229,6 +229,10 @@ class DocumentMeta(type):
     # Global registry of document classes by name (for polymorphic loading)
     _document_registry: Dict[str, type] = {}
 
+    # Cache for get_type_hints() results per class (performance optimization)
+    # Avoids expensive compile() and eval() calls on every _from_db()
+    _type_hints_cache: Dict[type, Dict[str, Any]] = {}
+
     def __new__(
         mcs,
         name: str,
@@ -715,7 +719,11 @@ class Document(metaclass=DocumentMeta):
         # Deserialize embedded documents (EmbeddedDocument fields)
         if EMBEDDED_DOCUMENT_AVAILABLE:
             try:
-                hints = get_type_hints(target_cls)
+                # Check cache first to avoid expensive get_type_hints() call
+                # get_type_hints() uses compile() and eval() which are extremely slow
+                if target_cls not in DocumentMeta._type_hints_cache:
+                    DocumentMeta._type_hints_cache[target_cls] = get_type_hints(target_cls)
+                hints = DocumentMeta._type_hints_cache[target_cls]
             except Exception:
                 # get_type_hints can fail in some edge cases
                 hints = {}
@@ -780,9 +788,6 @@ class Document(metaclass=DocumentMeta):
     async def save(
         self,
         link_rule: WriteRules = WriteRules.DO_NOTHING,
-        *,
-        validate: bool = True,
-        hooks: bool = True,
     ) -> str:
         """
         Save the document to MongoDB.
@@ -790,16 +795,15 @@ class Document(metaclass=DocumentMeta):
         If the document has an _id, updates the existing document.
         Otherwise, inserts a new document.
 
+        All validation happens in Rust during BSON conversion - there is no
+        overhead to skipping validation in Python since Rust always validates.
+
         Args:
             link_rule: How to handle linked documents on save:
                 - WriteRules.DO_NOTHING (default): Only save this document
                 - WriteRules.WRITE: Cascade save to all linked documents first
-            validate: Run validation before save (default: True).
-                Set to False for fast-path inserts when you know data is valid.
-            hooks: Run before/after save hooks (default: True).
-                Set to False for fast-path inserts to skip hook execution.
 
-        Lifecycle hooks (only when hooks=True):
+        Lifecycle hooks:
         - before_event(Insert) or before_event(Save) runs before insert
         - after_event(Insert) or after_event(Save) runs after insert
 
@@ -814,34 +818,24 @@ class Document(metaclass=DocumentMeta):
             >>> # With cascade save to linked documents:
             >>> post = Post(title="Hello", author=user)
             >>> await post.save(link_rule=WriteRules.WRITE)  # Saves user first
-            >>>
-            >>> # Fast-path insert (skip validation and hooks):
-            >>> user = User(email="alice@example.com", name="Alice", age=30)
-            >>> doc_id = await user.save(validate=False, hooks=False)  # ~3x faster
-
-        Warning:
-            When using validate=False, ensure your data is valid as validation
-            will be skipped. Invalid data may cause MongoDB errors or data corruption.
         """
         from . import _engine
 
         collection_name = self.__collection_name__()
         is_insert = self._id is None
 
-        # Run validation if enabled
-        if validate:
-            await run_validate_on_save(self)
+        # Run validation hooks if configured in Settings
+        await run_validate_on_save(self)
 
         # Cascade save linked documents if requested
         if link_rule == WriteRules.WRITE:
             await self._save_linked_documents()
 
         # Run before hooks
-        if hooks:
-            if is_insert:
-                await run_before_event(self, EventType.INSERT)
-            else:
-                await run_before_event(self, EventType.SAVE)
+        if is_insert:
+            await run_before_event(self, EventType.INSERT)
+        else:
+            await run_before_event(self, EventType.SAVE)
 
         # Store current changes for state management
         if self._use_state_management:
@@ -894,11 +888,10 @@ class Document(metaclass=DocumentMeta):
             self._save_state()
 
         # Run after hooks
-        if hooks:
-            if is_insert:
-                await run_after_event(self, EventType.INSERT)
-            else:
-                await run_after_event(self, EventType.SAVE)
+        if is_insert:
+            await run_after_event(self, EventType.INSERT)
+        else:
+            await run_after_event(self, EventType.SAVE)
 
         return result_id
 
