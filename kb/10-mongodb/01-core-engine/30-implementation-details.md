@@ -1,6 +1,13 @@
+---
+title: Core MongoDB Implementation Details
+status: implemented
+component: data-bridge-mongodb
+type: implementation
+---
+
 # Core MongoDB Implementation
 
-> Part of [Core MongoDB Engine Documentation](./README.md)
+> Part of [Core MongoDB Engine Documentation](./index.md)
 
 This document provides details on the file structure, key data structures, and implementation patterns used in the core engine.
 

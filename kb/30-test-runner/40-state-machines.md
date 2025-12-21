@@ -1,6 +1,13 @@
+---
+title: Test Framework State Machines
+status: implemented
+component: data-bridge-test
+type: state-machine
+---
+
 # State Machines
 
-> Part of [dbtest Architecture Documentation](./README.md)
+> Part of [Test Framework Documentation](./index.md)
 
 This document defines the state machines for the dbtest system, including discovery, test execution, benchmark execution, and CLI workflows.
 
@@ -346,6 +353,6 @@ pub struct BenchmarkExecution {
 
 ## See Also
 
-- [Architecture](./architecture.md) - System architecture diagrams
-- [Data Flows](./data-flows.md) - Sequence diagrams
-- [Implementation](./implementation.md) - File structure and patterns
+- [Architecture](./00-architecture.md) - System architecture diagrams
+- [Data Flows](./20-data-flows.md) - Sequence diagrams
+- [Implementation](./30-implementation-details.md) - File structure and patterns

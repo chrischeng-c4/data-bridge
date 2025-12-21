@@ -1,6 +1,13 @@
+---
+title: Core MongoDB Components
+status: implemented
+component: data-bridge-mongodb
+type: components
+---
+
 # Core MongoDB Components
 
-> Part of [Core MongoDB Engine Documentation](./README.md)
+> Part of [Core MongoDB Engine Documentation](./index.md)
 
 This document details the responsibilities and internals of the key components in the MongoDB engine.
 

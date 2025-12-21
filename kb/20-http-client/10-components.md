@@ -1,6 +1,13 @@
+---
+title: HTTP Client Components
+status: implemented
+component: data-bridge-http
+type: components
+---
+
 # HTTP Client Components
 
-> Part of [HTTP Client Documentation](./README.md)
+> Part of [HTTP Client Documentation](./index.md)
 
 ## 1. HttpClient (`client.rs`)
 

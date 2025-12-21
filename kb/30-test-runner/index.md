@@ -1,3 +1,10 @@
+---
+title: Test Framework Overview
+status: implemented
+component: data-bridge-test
+type: index
+---
+
 # dbtest System Architecture
 
 ## Overview
@@ -50,7 +57,7 @@ Rust Reporter (reporter.rs)
 
 This architecture documentation is split into focused files for easier navigation:
 
-### 1. [architecture.md](./architecture.md)
+### 1. [00-architecture.md](./00-architecture.md)
 High-level system diagrams showing:
 - Overall architecture flow with **Rust runner as execution engine**
 - Detailed component architecture
@@ -58,7 +65,7 @@ High-level system diagrams showing:
 - **Rust runner capabilities** (parallel execution, GIL management)
 - Performance targets for parallel execution
 
-### 2. [state-machines.md](./state-machines.md)
+### 2. [40-state-machines.md](./40-state-machines.md)
 State machine definitions for:
 - Discovery lifecycle
 - Test execution lifecycle (with parallel states)
@@ -66,7 +73,7 @@ State machine definitions for:
 - CLI execution lifecycle
 - State data structures (Rust types)
 
-### 3. [data-flows.md](./data-flows.md)
+### 3. [20-data-flows.md](./20-data-flows.md)
 Sequence diagrams showing:
 - **Test discovery and parallel execution flow** (Tokio tasks)
 - **Benchmark discovery and parallel execution flow**
@@ -74,7 +81,7 @@ Sequence diagrams showing:
 - Error handling with task isolation
 - Performance optimization points
 
-### 4. [components.md](./components.md)
+### 4. [10-components.md](./10-components.md)
 Component responsibilities and integration:
 - Python layer (CLI, lazy loading) - minimal wrapper
 - **Rust layer (discovery, runner with Tokio, reporter)** - core engine
@@ -83,7 +90,7 @@ Component responsibilities and integration:
 - Integration with existing systems
 - Performance characteristics with parallel execution
 
-### 5. [implementation.md](./implementation.md)
+### 5. [30-implementation-details.md](./30-implementation-details.md)
 Implementation details:
 - File structure and organization
 - **Parallel execution flow diagrams** (Tokio tasks)

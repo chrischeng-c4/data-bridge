@@ -1,6 +1,13 @@
+---
+title: HTTP Client Architecture
+status: implemented
+component: data-bridge-http
+type: architecture
+---
+
 # HTTP Client Architecture
 
-> Part of [HTTP Client Documentation](./README.md)
+> Part of [HTTP Client Documentation](./index.md)
 
 ## Design Principles
 

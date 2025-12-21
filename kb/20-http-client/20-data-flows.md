@@ -1,6 +1,13 @@
+---
+title: HTTP Client Data Flows
+status: implemented
+component: data-bridge-http
+type: data-flow
+---
+
 # HTTP Client Data Flows
 
-> Part of [HTTP Client Documentation](./README.md)
+> Part of [HTTP Client Documentation](./index.md)
 
 ## 1. Request Execution Flow
 

@@ -1,3 +1,10 @@
+---
+title: Python API Overview
+status: implemented
+component: data-bridge-python
+type: index
+---
+
 # Python API Layer Architecture
 
 ## Overview
@@ -39,26 +46,26 @@ graph TB
 
 ## Documentation Structure
 
-### 1. [architecture.md](./architecture.md)
+### 1. [00-architecture.md](./00-architecture.md)
 High-level architectural patterns, including:
 - The **Proxy Pattern** for field access and query building.
 - The **Copy-on-Write** strategy for state tracking.
 - The **Bridge Pattern** for Rust integration.
 
-### 2. [components.md](./components.md)
+### 2. [10-components.md](./10-components.md)
 Detailed breakdown of key components:
 - **Document**: The core model class and its metaclass magic.
 - **FieldProxy**: How `User.name == "Alice"` works.
 - **QueryBuilder**: Implementation of the fluent API (`.find(...).sort(...)`).
 - **StateTracker**: Efficient change detection logic.
 
-### 3. [data-flows.md](./data-flows.md)
+### 3. [20-data-flows.md](./20-data-flows.md)
 Sequence diagrams illustrating:
 - **Query Construction**: Python expression → MongoDB Filter.
 - **Document Hydration**: Rust BSON → Python Object.
 - **Save Lifecycle**: Change detection → Validation → Rust Insert/Update.
 
-### 4. [implementation.md](./implementation.md)
+### 4. [30-implementation-details.md](./30-implementation-details.md)
 Implementation details:
 - Metaclass implementation (`DocumentMeta`).
 - Type extraction logic (`type_extraction.py`).

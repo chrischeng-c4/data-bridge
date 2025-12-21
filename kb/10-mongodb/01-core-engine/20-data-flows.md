@@ -1,6 +1,13 @@
+---
+title: Core MongoDB Data Flows
+status: implemented
+component: data-bridge-mongodb
+type: data-flow
+---
+
 # Core MongoDB Data Flows
 
-> Part of [Core MongoDB Engine Documentation](./README.md)
+> Part of [Core MongoDB Engine Documentation](./index.md)
 
 This document illustrates the data flow for key operations, highlighting the interaction between Python, PyO3, and Rust, specifically focusing on GIL management.
 

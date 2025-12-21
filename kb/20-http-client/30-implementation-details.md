@@ -1,6 +1,13 @@
+---
+title: HTTP Client Implementation Details
+status: implemented
+component: data-bridge-http
+type: implementation
+---
+
 # HTTP Client Implementation
 
-> Part of [HTTP Client Documentation](./README.md)
+> Part of [HTTP Client Documentation](./index.md)
 
 ## File Structure
 

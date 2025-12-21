@@ -1,6 +1,13 @@
+---
+title: Test Framework Components
+status: implemented
+component: data-bridge-test
+type: components
+---
+
 # Components
 
-> Part of [dbtest Architecture Documentation](./README.md)
+> Part of [Test Framework Documentation](./index.md)
 
 This document details the responsibilities of each component in the dbtest system.
 
@@ -490,7 +497,7 @@ Rust Error → PyO3 PyErr → Python Exception → CLI Exit Code
 
 ## See Also
 
-- [Architecture](./architecture.md) - High-level architecture
-- [State Machines](./state-machines.md) - Lifecycle states
-- [Data Flows](./data-flows.md) - Sequence diagrams
-- [Implementation](./implementation.md) - File structure and patterns
+- [Architecture](./00-architecture.md) - High-level architecture
+- [State Machines](./40-state-machines.md) - Lifecycle states
+- [Data Flows](./20-data-flows.md) - Sequence diagrams
+- [Implementation](./30-implementation-details.md) - File structure and patterns

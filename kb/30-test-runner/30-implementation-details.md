@@ -1,6 +1,13 @@
+---
+title: Test Framework Implementation Details
+status: implemented
+component: data-bridge-test
+type: implementation
+---
+
 # Implementation Details
 
-> Part of [dbtest Architecture Documentation](./README.md)
+> Part of [Test Framework Documentation](./index.md)
 
 This document covers implementation-specific details including file structure, execution flows, design patterns, and performance characteristics.
 
@@ -631,10 +638,10 @@ dbtest --verbose  # Shows files found, filtered, loaded
 
 ## See Also
 
-- [Architecture](./architecture.md) - High-level architecture
-- [State Machines](./state-machines.md) - Lifecycle states
-- [Data Flows](./data-flows.md) - Sequence diagrams
-- [Components](./components.md) - Component responsibilities
+- [Architecture](./00-architecture.md) - High-level architecture
+- [State Machines](./40-state-machines.md) - Lifecycle states
+- [Data Flows](./20-data-flows.md) - Sequence diagrams
+- [Components](./10-components.md) - Component responsibilities
 
 ## References
 

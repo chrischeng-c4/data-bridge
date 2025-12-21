@@ -1,3 +1,10 @@
+---
+title: HTTP Client Overview
+status: implemented
+component: data-bridge-http
+type: index
+---
+
 # HTTP Client Architecture
 
 ## Overview
@@ -34,25 +41,25 @@ graph TB
 
 ## Documentation Structure
 
-### 1. [architecture.md](./architecture.md)
+### 1. [00-architecture.md](./00-architecture.md)
 High-level design principles:
 - The `ExtractedRequest` pattern for thread safety.
 - The distinction between Client creation (expensive) and Request execution (cheap).
 - Security architecture.
 
-### 2. [components.md](./components.md)
+### 2. [10-components.md](./10-components.md)
 Detailed breakdown:
 - **HttpClient**: The connection pool manager.
 - **RequestBuilder**: Fluent API for constructing requests.
 - **HttpResponse**: Normalized response structure with latency metrics.
 - **Error Sanitizer**: Regex-based redaction engine.
 
-### 3. [data-flows.md](./data-flows.md)
+### 3. [20-data-flows.md](./20-data-flows.md)
 Sequence diagrams:
 - **Request Execution**: Python -> Rust -> Network -> Python.
 - **Error Handling**: How raw network errors are sanitized and mapped to exceptions.
 
-### 4. [implementation.md](./implementation.md)
+### 4. [30-implementation-details.md](./30-implementation-details.md)
 Implementation details:
 - File structure.
 - Key structs (`HttpClientInner`, `ExtractedBody`).

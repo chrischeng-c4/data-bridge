@@ -1,6 +1,13 @@
+---
+title: Core MongoDB Engine Architecture
+status: implemented
+component: data-bridge-mongodb
+type: architecture
+---
+
 # Core MongoDB Architecture
 
-> Part of [Core MongoDB Engine Documentation](./README.md)
+> Part of [Core MongoDB Engine Documentation](./index.md)
 
 ## High-Level Architecture
 

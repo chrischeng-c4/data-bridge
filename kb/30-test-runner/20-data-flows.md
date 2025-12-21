@@ -1,6 +1,13 @@
+---
+title: Test Framework Data Flows
+status: implemented
+component: data-bridge-test
+type: data-flow
+---
+
 # Data Flows
 
-> Part of [dbtest Architecture Documentation](./README.md)
+> Part of [Test Framework Documentation](./index.md)
 
 This document shows the sequence of operations and data flow through the dbtest system for different execution paths.
 
@@ -292,6 +299,6 @@ sequenceDiagram
 
 ## See Also
 
-- [Architecture](./architecture.md) - System architecture
-- [State Machines](./state-machines.md) - Lifecycle states
-- [Components](./components.md) - Component responsibilities
+- [Architecture](./00-architecture.md) - System architecture
+- [State Machines](./40-state-machines.md) - Lifecycle states
+- [Components](./10-components.md) - Component responsibilities

@@ -1,6 +1,13 @@
+---
+title: Python API Components
+status: implemented
+component: data-bridge-python
+type: components
+---
+
 # Python Layer Components
 
-> Part of [Python API Layer Documentation](./README.md)
+> Part of [Python API Layer Documentation](./index.md)
 
 ## 1. Document (`document.py`)
 

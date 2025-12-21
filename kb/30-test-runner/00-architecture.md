@@ -1,6 +1,13 @@
+---
+title: Test Framework Architecture
+status: implemented
+component: data-bridge-test
+type: architecture
+---
+
 # System Architecture
 
-> Part of [dbtest Architecture Documentation](./README.md)
+> Part of [Test Framework Documentation](./index.md)
 
 ## High-Level Architecture
 
@@ -267,7 +274,7 @@ Python::with_gil(|py| {
 
 ## See Also
 
-- [State Machines](./state-machines.md) - Lifecycle state machines
-- [Data Flows](./data-flows.md) - Sequence diagrams
-- [Components](./components.md) - Detailed component responsibilities
-- [Implementation](./implementation.md) - File structure and patterns
+- [State Machines](./40-state-machines.md) - Lifecycle state machines
+- [Data Flows](./20-data-flows.md) - Sequence diagrams
+- [Components](./10-components.md) - Detailed component responsibilities
+- [Implementation](./30-implementation-details.md) - File structure and patterns

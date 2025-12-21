@@ -1,6 +1,13 @@
+---
+title: Python API Data Flows
+status: implemented
+component: data-bridge-python
+type: data-flow
+---
+
 # Python Layer Data Flows
 
-> Part of [Python API Layer Documentation](./README.md)
+> Part of [Python API Layer Documentation](./index.md)
 
 ## 1. Query Construction Flow
 

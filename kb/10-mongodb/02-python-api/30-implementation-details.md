@@ -1,6 +1,13 @@
+---
+title: Python API Implementation Details
+status: implemented
+component: data-bridge-python
+type: implementation
+---
+
 # Python Layer Implementation
 
-> Part of [Python API Layer Documentation](./README.md)
+> Part of [Python API Layer Documentation](./index.md)
 
 ## Metaclass Magic (`document.py`)
 
