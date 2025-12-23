@@ -28,8 +28,9 @@ pub struct PoolConfig {
 impl Default for PoolConfig {
     fn default() -> Self {
         Self {
-            min_pool_size: Some(0),
-            max_pool_size: Some(10),
+            // Optimization: Keep 5 connections warm to reduce establishment overhead
+            min_pool_size: Some(5),
+            max_pool_size: Some(20),
             max_idle_time: None,
             connect_timeout: Some(Duration::from_secs(10)),
             server_selection_timeout: Some(Duration::from_secs(30)),
@@ -172,8 +173,8 @@ mod tests {
     #[test]
     fn test_default_pool_config() {
         let config = PoolConfig::default();
-        assert_eq!(config.min_pool_size, Some(0));
-        assert_eq!(config.max_pool_size, Some(10));
+        assert_eq!(config.min_pool_size, Some(5));  // Optimized: warm connections
+        assert_eq!(config.max_pool_size, Some(20)); // Optimized: larger pool
         assert_eq!(config.app_name, Some("data-bridge".to_string()));
     }
 
