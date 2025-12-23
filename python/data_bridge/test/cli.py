@@ -471,7 +471,10 @@ async def run_profile(cli_config: CLIConfig) -> int:
             await ProfileDoc(name="update_target", value=100).save()
 
             async def op():
-                await ProfileDoc.find_one(ProfileDoc.value == 100).update({"$set": {"value": 101}})
+                doc = await ProfileDoc.find_one(ProfileDoc.name == "update_target")
+                if doc:
+                    doc.value = doc.value + 1 if doc.value < 1000 else 100
+                    await doc.save()
 
             result = await runner.profile_operation(op, "update_one")
 
