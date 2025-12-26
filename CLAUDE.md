@@ -6,50 +6,6 @@ Respond in English (U.S.) by default. Use Traditional Chinese only when user wri
 
 ---
 
-<chain-of-thought>
-Before starting ANY feature work, work through these steps IN ORDER:
-
-<step number="1" name="WHAT">
-  - Feature number: ___
-  - Feature name: ___
-  - User-facing outcome: ___
-  - Component: MongoDB | HTTP | Test Framework | Core
-</step>
-
-<step number="2" name="WHERE in SDD">
-  - .specify/specs/{NNN}-{name}/spec.md exists? YES/NO
-  - .specify/specs/{NNN}-{name}/plan.md exists? YES/NO
-  - .specify/specs/{NNN}-{name}/tasks.md exists? YES/NO
-  - Current phase: SPECIFY | PLAN | TASKS | IMPLEMENT | TEST
-</step>
-
-<step number="3" name="NEXT ACTION">
-  - If no spec → /speckit:specify
-  - If no plan → /speckit:plan
-  - If no tasks → /speckit:tasks
-  - If tasks exist → implement next task
-  - If implemented → run tests (pytest + cargo test)
-</step>
-
-<step number="4" name="TESTS NEEDED">
-  - Rust unit tests (cargo test): ___
-  - Python unit tests (pytest): ___
-  - Integration tests (MongoDB required): ___
-  - Benchmark verification: ___
-</step>
-
-<step number="5" name="COMPLETE?">
-  - All tasks done? YES/NO
-  - All tests pass (Rust + Python)? YES/NO
-  - cargo clippy clean? YES/NO
-  - Performance verified? YES/NO
-  - Ready for PR? YES/NO
-</step>
-
-You MUST write out these 5 steps before writing any code.
-</chain-of-thought>
-
----
 
 <agent-orchestration>
 The main conversation thread acts as an **Orchestrator/PM/Planner**. It should:
@@ -112,33 +68,6 @@ Orchestrator:
 ---
 
 <decision-trees>
-
-<tree name="Which SDD Workflow">
-START: New work?
-│
-├─► Estimated LOC > 500?
-│   └─ YES → Full SDD (spec + plan + tasks)
-│
-├─► Touches both Rust and Python?
-│   └─ YES → Full SDD
-│
-├─► Performance-critical feature?
-│   └─ YES → Full SDD (requires benchmarks)
-│
-├─► Crosses PyO3 boundary?
-│   └─ YES → Full SDD (complex serialization)
-│
-├─► New validation/type system feature?
-│   └─ YES → Full SDD
-│
-└─► Otherwise → Lightweight SDD (spec only)
-    │
-    ├─ Full SDD path:
-    │  /speckit:specify → /speckit:plan → /speckit:tasks → implement
-    │
-    └─ Lightweight SDD path:
-       /speckit:specify → implement directly (no plan/tasks)
-</tree>
 
 <tree name="Component Selection">
 START: What component does this touch?
@@ -230,65 +159,6 @@ START: What layer needs testing?
 
 <few-shot-examples>
 
-<example name="Complete SDD Workflow">
-User: "Add constraint validation for email fields"
-
-<thinking>
-STEP 1: WHAT
-- Feature: 109-email-constraint-validation
-- Component: Python layer + Rust validation
-- Outcome: Users can add email validation to fields
-
-STEP 2: WHERE in SDD
-- spec.md: NO
-- Current phase: SPECIFY
-
-STEP 3: NEXT ACTION
-→ Run /speckit:specify
-
-STEP 4: TESTS NEEDED
-- Python unit: test_email_constraint_validation
-- Rust unit: test_validate_email_format
-- Integration: test_email_validation_on_save
-
-STEP 5: COMPLETE?
-- All tasks done: NO
-- Tests pass: NO
-- Performance verified: NO
-</thinking>
-
-Action: /speckit:specify
-</example>
-
-<example name="Performance-Critical Feature">
-User: "Optimize bulk insert for 50,000+ documents"
-
-<thinking>
-STEP 1: WHAT
-- Feature: 201-bulk-insert-optimization
-- Component: data-bridge-mongodb
-- Outcome: 50K inserts 2x faster
-
-STEP 2: WHERE in SDD
-- This is Phase 2 (200 series) - performance
-- Requires Full SDD + benchmarks
-
-STEP 3: NEXT ACTION
-→ Run /speckit:specify with performance targets
-
-STEP 4: TESTS NEEDED
-- Benchmark: bench_bulk_insert_50k.py
-- Unit: test_batch_partitioning
-- Integration: test_bulk_insert_correctness
-- Verify: GIL release, Rayon parallel processing
-
-STEP 5: COMPLETE?
-- Must verify: 1.5x faster than baseline
-</thinking>
-
-Action: /speckit:specify
-</example>
-
 <example name="Commit Format">
 feat(108): add email/url constraint validation
 fix(103): correct GIL release in bulk operations
@@ -307,12 +177,6 @@ data-bridge/
 ├── Cargo.toml                      # Workspace root
 ├── CLAUDE.md                       # This file
 ├── pyproject.toml                  # Python package config (Maturin)
-├── .specify/                       # SDD artifacts
-│   ├── ROADMAP.md                  # Feature roadmap
-│   └── specs/{NNN}-{name}/
-│       ├── spec.md
-│       ├── plan.md
-│       └── tasks.md
 ├── crates/
 │   ├── data-bridge/                # PyO3 bindings (main entry point)
 │   │   └── src/
@@ -360,16 +224,6 @@ data-bridge/
     └── bench_comparison.py         # Beanie/PyMongo comparison
 </repository-structure>
 
-<sdd-commands>
-| Command | Output | Purpose |
-|---------|--------|---------|
-| /speckit:specify | spec.md | Define requirements |
-| /speckit:plan | plan.md | Design architecture |
-| /speckit:tasks | tasks.md | Generate task breakdown |
-| /speckit:implement | code+tests | Implement feature |
-| /git:commit --push --mr | PR | Create merge request |
-</sdd-commands>
-
 <build-commands>
 # Rust build
 maturin develop                      # Debug build
@@ -393,26 +247,26 @@ cargo audit
 </build-commands>
 
 <feature-series>
-Roadmap organization (.specify/ROADMAP.md):
+Feature roadmap organization:
 
 1xx Series: Type Validation System (COMPLETED)
-  - 101: Copy-on-Write state management ✅
-  - 102: Lazy validation ✅
-  - 103: Fast-path bulk operations ✅
-  - 104: Rust query execution ✅
-  - 105: Type schema extraction ✅
-  - 106: Basic type validation ✅
-  - 107: Complex type validation ✅
-  - 108: Constraint validation ✅
+  - Copy-on-Write state management ✅
+  - Lazy validation ✅
+  - Fast-path bulk operations ✅
+  - Rust query execution ✅
+  - Type schema extraction ✅
+  - Basic type validation ✅
+  - Complex type validation ✅
+  - Constraint validation ✅
 
 2xx Series: Performance Optimization (IN PROGRESS)
-  - 201+: Bulk operation improvements
-  - 2xx: GIL release optimization
-  - 2xx: Zero-copy deserialization
+  - Bulk operation improvements
+  - GIL release optimization
+  - Zero-copy deserialization
 
 9xx Series: Infrastructure (COMPLETED)
-  - 901: HTTP client ✅
-  - 902: Test framework ✅
+  - HTTP client ✅
+  - Test framework ✅
 
 Future Series:
   - 3xx: Relations & References
@@ -495,8 +349,6 @@ Bulk Operations:
 
 <negative-constraints>
 
-<rule severity="NEVER">Skip SDD phases → Leads to misaligned code → Follow specify → plan → tasks → implement</rule>
-<rule severity="NEVER">Implement without spec → No traceability → Run /speckit:specify first</rule>
 <rule severity="NEVER">Skip performance verification → Regressions undetected → Run benchmarks before PR</rule>
 <rule severity="NEVER">Hold GIL during BSON conversion → Blocks Python threads → Use py.allow_threads()</rule>
 <rule severity="NEVER">Process Python bytes in Python → Defeats purpose → All BSON in Rust</rule>
@@ -575,13 +427,6 @@ Assistant: *Spawns implementer agent* → "Add email validation to validation.rs
 <delimiters>
 Use these markers in workflow updates:
 
-<marker name="SDD STATUS">
-Feature: 109-email-validation
-Phase: IMPLEMENT
-Tasks: 3/5 complete
-Component: Python layer + Rust validation
-</marker>
-
 <marker name="IMPLEMENTING">
 Task: Add email regex validation
 File: crates/data-bridge/src/validation.rs
@@ -624,14 +469,6 @@ After each work session, report in this format:
   <feature>{NNN}-{name}</feature>
   <component>{MongoDB|HTTP|Test|Python|PyO3|Common}</component>
 
-  <sdd-phase>
-    <phase name="Specify" status="DONE"/>
-    <phase name="Plan" status="DONE"/>
-    <phase name="Tasks" status="DONE"/>
-    <phase name="Implement" status="IN PROGRESS" progress="3/5"/>
-    <phase name="Test" status="PENDING"/>
-  </sdd-phase>
-
   <tasks-completed>
     <task status="done">Task 1: Add Rust validation function</task>
     <task status="done">Task 2: Add PyO3 binding</task>
@@ -669,13 +506,6 @@ After each work session, report in this format:
 
 <self-correction>
 Before committing or creating PR, verify ALL items:
-
-<checklist name="SDD Compliance">
-  <item>spec.md exists in .specify/specs/{NNN}-{name}/?</item>
-  <item>plan.md exists and was followed?</item>
-  <item>tasks.md exists and all tasks complete?</item>
-  <item>Implementation matches spec?</item>
-</checklist>
 
 <checklist name="Code Quality - Rust">
   <item>cargo build passes?</item>
@@ -731,14 +561,12 @@ If ANY item is NO, fix it before proceeding.
 ---
 
 <quick-reference>
-SDD WORKFLOW:
-  1. /speckit:specify → .specify/specs/{NNN}-{name}/spec.md
-  2. /speckit:plan → plan.md
-  3. /speckit:tasks → tasks.md
-  4. Implement each task
-  5. Run tests (cargo test + pytest)
-  6. Run benchmarks
-  7. /git:commit --push --mr
+DEVELOPMENT WORKFLOW:
+  1. Understand requirements and create plan
+  2. Implement feature/fix
+  3. Run tests (cargo test + pytest)
+  4. Run benchmarks (if performance-related)
+  5. Create commit and PR
 
 BUILD CYCLE:
   maturin develop                    # Build Python extension
