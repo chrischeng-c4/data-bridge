@@ -45,6 +45,9 @@ mod http;
 #[cfg(feature = "test")]
 mod test;
 
+#[cfg(feature = "postgres")]
+mod postgres;
+
 /// data-bridge Python module
 #[pymodule]
 fn data_bridge(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -78,7 +81,13 @@ fn data_bridge(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_submodule(&test_module)?;
     }
 
-    // Future: Add other modules (redis, postgres, rabbitmq, nats)
+    // Add PostgreSQL module if enabled
+    #[cfg(feature = "postgres")]
+    {
+        let postgres_module = PyModule::new(py, "postgres")?;
+        postgres::register_module(&postgres_module)?;
+        m.add_submodule(&postgres_module)?;
+    }
 
     Ok(())
 }

@@ -31,8 +31,13 @@ A specialized test runner for mixed Rust/Python projects.
 - **Replaces**: `pytest` (for discovery/execution, not assertions)
 - **Key Features**: Parallel test execution, Fast discovery via Rust `walkdir`.
 
+### [4. PostgreSQL Solution](../40-postgres/index.md)
+A high-performance async PostgreSQL ORM with Rust backend.
+- **Components**: [Rust Core Engine](../40-postgres/01-core-engine/index.md), [Python API](../40-postgres/02-python-api/index.md)
+- **Key Features**: CRUD operations, Transactions, Migrations, Connection pooling.
+- **Driver**: sqlx with compile-time query validation.
+
 ### Future Solutions
-- **Postgres**: High-performance async driver.
 - **Redis**: Async cache/queue interface.
 - **MySQL**: Async driver.
 

@@ -1,0 +1,40 @@
+[package]
+name = "data-bridge-postgres"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "High-performance async PostgreSQL ORM for Python with Rust backend"
+
+[dependencies]
+# Async runtime
+tokio = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+
+# PostgreSQL
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "chrono", "uuid", "json"] }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Types
+uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = { workspace = true }
+rust_decimal = { version = "1.36", features = ["serde"] }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Shared
+data-bridge-common = { path = "../data-bridge-common", features = ["postgres-errors"] }
+
+# Parallel processing
+rayon = "1.10"
+
+# Tracing
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"

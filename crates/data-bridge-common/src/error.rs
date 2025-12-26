@@ -69,6 +69,31 @@ impl From<bson::de::Error> for DataBridgeError {
     }
 }
 
+// PostgreSQL-specific error conversions (when postgres-errors feature is enabled)
+#[cfg(feature = "postgres-errors")]
+impl From<sqlx::Error> for DataBridgeError {
+    fn from(err: sqlx::Error) -> Self {
+        use sqlx::Error;
+        match err {
+            Error::Configuration(_) => DataBridgeError::Connection(err.to_string()),
+            Error::Database(_) => DataBridgeError::Database(err.to_string()),
+            Error::Io(_) => DataBridgeError::Connection(err.to_string()),
+            Error::Tls(_) => DataBridgeError::Connection(err.to_string()),
+            Error::Protocol(_) => DataBridgeError::Connection(err.to_string()),
+            Error::RowNotFound => DataBridgeError::Query("Row not found".to_string()),
+            Error::TypeNotFound { .. } => DataBridgeError::Deserialization(err.to_string()),
+            Error::ColumnIndexOutOfBounds { .. } => DataBridgeError::Query(err.to_string()),
+            Error::ColumnNotFound(_) => DataBridgeError::Query(err.to_string()),
+            Error::ColumnDecode { .. } => DataBridgeError::Deserialization(err.to_string()),
+            Error::Decode(_) => DataBridgeError::Deserialization(err.to_string()),
+            Error::PoolTimedOut => DataBridgeError::Connection("Connection pool timed out".to_string()),
+            Error::PoolClosed => DataBridgeError::Connection("Connection pool closed".to_string()),
+            Error::WorkerCrashed => DataBridgeError::Internal("Worker thread crashed".to_string()),
+            _ => DataBridgeError::Database(err.to_string()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -53,6 +53,10 @@ test-integration:
 bench:
     uv run dbtest bench
 
+# Run PostgreSQL benchmarks (data-bridge vs SQLAlchemy)
+bench-postgres:
+    uv run python benchmarks/bench_postgres_comparison.py
+
 # Run with verbose output
 test-verbose:
     uv run dbtest --verbose

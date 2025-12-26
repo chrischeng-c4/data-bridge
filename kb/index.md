@@ -10,6 +10,7 @@ This directory serves as the **Single Source of Truth** for the system architect
 - **[MongoDB Solution](./10-mongodb/index.md)**: High-performance MongoDB ORM.
 - **[HTTP Client](./20-http-client/index.md)**: Async HTTP solution.
 - **[Test Runner](./30-test-runner/index.md)**: Parallel test execution engine.
+- **[PostgreSQL Solution](./40-postgres/index.md)**: High-performance PostgreSQL ORM.
 - **[Shared Internals](./90-shared-internals/index.md)**: Common PyO3 patterns and bridge logic.
 
 ## Quick Links

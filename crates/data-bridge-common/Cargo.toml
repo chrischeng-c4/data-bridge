@@ -18,7 +18,9 @@ tracing.workspace = true
 # Optional dependencies for error conversions
 mongodb = { workspace = true, optional = true }
 bson = { workspace = true, optional = true }
+sqlx = { version = "0.8", features = ["postgres"], optional = true }
 
 [features]
 default = []
 mongodb-errors = ["mongodb", "bson"]
+postgres-errors = ["sqlx"]

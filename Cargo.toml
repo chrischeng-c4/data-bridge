@@ -2,6 +2,7 @@
 members = [
     "crates/data-bridge",
     "crates/data-bridge-mongodb",
+    "crates/data-bridge-postgres",
     "crates/data-bridge-http",
     "crates/data-bridge-test",
     "crates/data-bridge-common",

@@ -63,6 +63,12 @@ try:
 except ImportError:
     test = None  # Test module not built
 
+# Re-export postgres submodule from Rust
+try:
+    from data_bridge.data_bridge import postgres
+except ImportError:
+    postgres = None  # PostgreSQL module not built
+
 # Import _engine to provide the bridge to Rust backend
 from . import _engine
 
@@ -163,6 +169,7 @@ __all__ = [
     "mongodb",
     "http",
     "test",
+    "postgres",
     # Core
     "Document",
     "Settings",
