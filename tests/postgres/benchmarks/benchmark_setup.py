@@ -109,6 +109,14 @@ async def _async_setup():
                     );
                 """)
 
+                # Add indexes for filtered columns to prevent full table scans
+                await conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_bench_db_users_age ON bench_db_users(age);
+                    CREATE INDEX IF NOT EXISTS idx_bench_asyncpg_users_age ON bench_asyncpg_users(age);
+                    CREATE INDEX IF NOT EXISTS idx_bench_psycopg2_users_age ON bench_psycopg2_users(age);
+                    CREATE INDEX IF NOT EXISTS idx_bench_sa_users_age ON bench_sa_users(age);
+                """)
+
     # Initialize psycopg2
     try:
         import psycopg2.pool
