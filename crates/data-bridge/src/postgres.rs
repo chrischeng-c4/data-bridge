@@ -203,6 +203,17 @@ fn extracted_to_json(value: &data_bridge_postgres::ExtractedValue) -> serde_json
 }
 
 
+/// Adjusts parameter placeholders in SQL to account for offset
+/// Example: "age > $1 AND status = $2" with offset 3 becomes "age > $4 AND status = $5"
+fn adjust_placeholders(sql: &str, offset: usize) -> String {
+    use regex::Regex;
+    let re = Regex::new(r"\$(\d+)").unwrap();
+    re.replace_all(sql, |caps: &regex::Captures| {
+        let num: usize = caps[1].parse().unwrap();
+        format!("${}", num + offset)
+    }).to_string()
+}
+
 /// Converts ExtractedValue back to Python object
 fn extracted_to_py_value(py: Python<'_>, value: &data_bridge_postgres::ExtractedValue) -> PyResult<PyObject> {
     use data_bridge_postgres::ExtractedValue;
@@ -588,29 +599,31 @@ fn fetch_all<'py>(
     })
 }
 
-/// Update a single row in a table
+/// Update a single row in a table by primary key
 ///
 /// Args:
 ///     table: Table name
-///     filter: Dictionary of WHERE conditions (e.g., {"id": 1})
+///     pk_column: Primary key column name
+///     pk_value: Primary key value
 ///     update: Dictionary of column values to update
 ///
 /// Returns:
-///     bool: True if row was updated, False if not found
+///     Primary key value of the updated row
 ///
 /// Example:
-///     success = await update_one("users", {"id": 1}, {"name": "Bob", "age": 35})
+///     result = await update_one("users", "id", 1, {"name": "Bob", "age": 35})
 #[pyfunction]
-#[pyo3(signature = (table, filter, update))]
+#[pyo3(signature = (table, pk_column, pk_value, update))]
 fn update_one<'py>(
     py: Python<'py>,
     table: String,
-    filter: &Bound<'_, PyDict>,
+    pk_column: String,
+    pk_value: &Bound<'_, PyAny>,
     update: &Bound<'_, PyDict>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let conn = get_connection()?;
     // Phase 1: Extract Python values (GIL held)
-    let filter_values = py_dict_to_extracted_values(py, filter)?;
+    let pk_val = py_value_to_extracted(py, pk_value)?;
     let update_values = py_dict_to_extracted_values(py, update)?;
 
     // Phase 2: Execute SQL (GIL released via future_into_py)
@@ -618,11 +631,9 @@ fn update_one<'py>(
         let mut query = QueryBuilder::new(&table)
             .map_err(|e| PyRuntimeError::new_err(format!("Invalid table name: {}", e)))?;
 
-        // Add WHERE conditions
-        for (field, value) in filter_values {
-            query = query.where_clause(&field, Operator::Eq, value)
-                .map_err(|e| PyRuntimeError::new_err(format!("Invalid filter: {}", e)))?;
-        }
+        // Add WHERE condition for primary key
+        query = query.where_clause(&pk_column, Operator::Eq, pk_val.clone())
+            .map_err(|e| PyRuntimeError::new_err(format!("Invalid primary key: {}", e)))?;
 
         // Build UPDATE SQL
         let (sql, params) = query.build_update(&update_values)
@@ -641,43 +652,47 @@ fn update_one<'py>(
             .await
             .map_err(|e| PyRuntimeError::new_err(format!("Update failed: {}", e)))?;
 
-        // Phase 3: Return result (GIL acquired inside future_into_py)
-        Ok(result.rows_affected() > 0)
+        // Phase 3: Return primary key value if update succeeded (GIL acquired inside future_into_py)
+        if result.rows_affected() > 0 {
+            Python::with_gil(|py| extracted_to_py_value(py, &pk_val))
+        } else {
+            Err(PyRuntimeError::new_err("Update failed: no rows affected"))
+        }
     })
 }
 
-/// Delete a single row from a table
+/// Delete a single row from a table by primary key
 ///
 /// Args:
 ///     table: Table name
-///     filter: Dictionary of WHERE conditions (e.g., {"id": 1})
+///     pk_column: Primary key column name
+///     pk_value: Primary key value
 ///
 /// Returns:
-///     bool: True if row was deleted, False if not found
+///     Number of rows deleted (0 or 1)
 ///
 /// Example:
-///     success = await delete_one("users", {"id": 1})
+///     deleted = await delete_one("users", "id", 1)
 #[pyfunction]
-#[pyo3(signature = (table, filter))]
+#[pyo3(signature = (table, pk_column, pk_value))]
 fn delete_one<'py>(
     py: Python<'py>,
     table: String,
-    filter: &Bound<'_, PyDict>,
+    pk_column: String,
+    pk_value: &Bound<'_, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let conn = get_connection()?;
     // Phase 1: Extract Python values (GIL held)
-    let filter_values = py_dict_to_extracted_values(py, filter)?;
+    let pk_val = py_value_to_extracted(py, pk_value)?;
 
     // Phase 2: Execute SQL (GIL released via future_into_py)
     future_into_py(py, async move {
         let mut query = QueryBuilder::new(&table)
             .map_err(|e| PyRuntimeError::new_err(format!("Invalid table name: {}", e)))?;
 
-        // Add WHERE conditions
-        for (field, value) in filter_values {
-            query = query.where_clause(&field, Operator::Eq, value)
-                .map_err(|e| PyRuntimeError::new_err(format!("Invalid filter: {}", e)))?;
-        }
+        // Add WHERE condition for primary key
+        query = query.where_clause(&pk_column, Operator::Eq, pk_val)
+            .map_err(|e| PyRuntimeError::new_err(format!("Invalid primary key: {}", e)))?;
 
         // Build DELETE SQL
         let (sql, params) = query.build_delete();
@@ -695,66 +710,181 @@ fn delete_one<'py>(
             .await
             .map_err(|e| PyRuntimeError::new_err(format!("Delete failed: {}", e)))?;
 
-        // Phase 3: Return result (GIL acquired inside future_into_py)
-        Ok(result.rows_affected() > 0)
+        // Phase 3: Return number of rows deleted (GIL acquired inside future_into_py)
+        Ok(result.rows_affected() as i64)
     })
 }
 
-/// Count rows matching filter
+/// Update multiple rows matching WHERE clause
 ///
 /// Args:
 ///     table: Table name
-///     filter: Dictionary of WHERE conditions
+///     updates: Dictionary of column values to update
+///     where_clause: SQL WHERE clause string (without "WHERE" keyword)
+///     params: List of parameter values for WHERE clause
+///
+/// Returns:
+///     Number of rows updated
+///
+/// Example:
+///     updated = await update_many("users", {"status": "active"}, "age > $1", [25])
+#[pyfunction]
+#[pyo3(signature = (table, updates, where_clause, params))]
+fn update_many<'py>(
+    py: Python<'py>,
+    table: String,
+    updates: &Bound<'_, PyDict>,
+    where_clause: String,
+    params: Vec<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+
+    // Phase 1: Extract Python values (GIL held)
+    let update_values = py_dict_to_extracted_values(py, updates)?;
+    let where_params: Vec<data_bridge_postgres::ExtractedValue> = params
+        .iter()
+        .map(|param| py_value_to_extracted(py, param))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    // Phase 2: Execute SQL (GIL released via future_into_py)
+    future_into_py(py, async move {
+        // Build SET clause
+        let set_clause: Vec<String> = update_values
+            .iter()
+            .enumerate()
+            .map(|(i, (col, _))| format!("{} = ${}", col, i + 1))
+            .collect();
+
+        // Build UPDATE SQL
+        let mut sql = format!("UPDATE {} SET {}", table, set_clause.join(", "));
+
+        // Add WHERE clause if provided
+        if !where_clause.is_empty() {
+            // Adjust parameter placeholders in WHERE clause
+            let placeholder_offset = update_values.len();
+            let adjusted_where = adjust_placeholders(&where_clause, placeholder_offset);
+            sql.push_str(&format!(" WHERE {}", adjusted_where));
+        }
+
+        // Bind parameters (updates first, then where params)
+        let mut args = sqlx::postgres::PgArguments::default();
+        for (_, value) in &update_values {
+            value.bind_to_arguments(&mut args)
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to bind update parameter: {}", e)))?;
+        }
+        for param in &where_params {
+            param.bind_to_arguments(&mut args)
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to bind where parameter: {}", e)))?;
+        }
+
+        // Execute query
+        let result = sqlx::query_with(&sql, args)
+            .execute(conn.pool())
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Update failed: {}", e)))?;
+
+        // Phase 3: Return result (GIL acquired inside future_into_py)
+        Ok(result.rows_affected() as i64)
+    })
+}
+
+/// Delete multiple rows matching WHERE clause
+///
+/// Args:
+///     table: Table name
+///     where_clause: SQL WHERE clause string (without "WHERE" keyword)
+///     params: List of parameter values
+///
+/// Returns:
+///     Number of rows deleted
+///
+/// Example:
+///     deleted = await delete_many("users", "age < $1", [18])
+#[pyfunction]
+#[pyo3(signature = (table, where_clause, params))]
+fn delete_many<'py>(
+    py: Python<'py>,
+    table: String,
+    where_clause: String,
+    params: Vec<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+
+    // Phase 1: Extract Python parameter values (GIL held)
+    let extracted_params: Vec<data_bridge_postgres::ExtractedValue> = params
+        .iter()
+        .map(|param| py_value_to_extracted(py, param))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    // Phase 2: Execute SQL (GIL released via future_into_py)
+    future_into_py(py, async move {
+        // Build DELETE query
+        let mut sql = format!("DELETE FROM {}", table);
+
+        // Add WHERE clause if provided
+        if !where_clause.is_empty() {
+            sql.push_str(&format!(" WHERE {}", where_clause));
+        }
+
+        // Bind parameters
+        let mut args = sqlx::postgres::PgArguments::default();
+        for param in &extracted_params {
+            param.bind_to_arguments(&mut args)
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to bind parameter: {}", e)))?;
+        }
+
+        // Execute query
+        let result = sqlx::query_with(&sql, args)
+            .execute(conn.pool())
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Delete failed: {}", e)))?;
+
+        // Phase 3: Return result (GIL acquired inside future_into_py)
+        Ok(result.rows_affected() as i64)
+    })
+}
+
+/// Count rows matching WHERE clause
+///
+/// Args:
+///     table: Table name
+///     where_clause: SQL WHERE clause string (without "WHERE" keyword)
+///     params: List of parameter values
 ///
 /// Returns:
 ///     int: Number of matching rows
 ///
 /// Example:
-///     count = await count("users", {"age": 30})
+///     count = await count("users", "age > $1", [25])
 #[pyfunction]
-#[pyo3(signature = (table, filter))]
+#[pyo3(signature = (table, where_clause, params))]
 fn count<'py>(
     py: Python<'py>,
     table: String,
-    filter: &Bound<'_, PyDict>,
+    where_clause: String,
+    params: Vec<Bound<'py, PyAny>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let conn = get_connection()?;
-    // Phase 1: Extract Python values (GIL held)
-    let filter_values = py_dict_to_extracted_values(py, filter)?;
+
+    // Phase 1: Extract Python parameter values (GIL held)
+    let extracted_params: Vec<data_bridge_postgres::ExtractedValue> = params
+        .iter()
+        .map(|param| py_value_to_extracted(py, param))
+        .collect::<Result<Vec<_>, _>>()?;
 
     // Phase 2: Execute SQL (GIL released via future_into_py)
     future_into_py(py, async move {
-        let mut query = QueryBuilder::new(&table)
-            .map_err(|e| PyRuntimeError::new_err(format!("Invalid table name: {}", e)))?;
-
-        // Add WHERE conditions
-        for (field, value) in filter_values {
-            query = query.where_clause(&field, Operator::Eq, value)
-                .map_err(|e| PyRuntimeError::new_err(format!("Invalid filter: {}", e)))?;
-        }
-
-        // Build SELECT COUNT(*) query
-        let (select_sql, select_params) = query.build_select();
-
-        // Extract WHERE clause from SELECT query
+        // Build COUNT(*) query
         let mut sql = format!("SELECT COUNT(*) FROM {}", table);
-        let mut params = Vec::new();
 
-        if let Some(where_pos) = select_sql.find(" WHERE ") {
-            let where_clause = &select_sql[where_pos..];
-            // Find the end of WHERE clause (before ORDER BY, LIMIT, etc.)
-            let end_pos = where_clause
-                .find(" ORDER BY ")
-                .or_else(|| where_clause.find(" LIMIT "))
-                .or_else(|| where_clause.find(" OFFSET "))
-                .unwrap_or(where_clause.len());
-            sql.push_str(&where_clause[..end_pos]);
-            params = select_params.clone();
+        // Add WHERE clause if provided
+        if !where_clause.is_empty() {
+            sql.push_str(&format!(" WHERE {}", where_clause));
         }
 
         // Bind parameters
         let mut args = sqlx::postgres::PgArguments::default();
-        for param in &params {
+        for param in &extracted_params {
             param.bind_to_arguments(&mut args)
                 .map_err(|e| PyRuntimeError::new_err(format!("Failed to bind parameter: {}", e)))?;
         }
@@ -828,6 +958,112 @@ fn begin_transaction<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
     })
 }
 
+/// Find multiple rows with advanced query options (alias for fetch_all with WHERE clause support)
+///
+/// Args:
+///     table: Table name
+///     where_clause: SQL WHERE clause string (without "WHERE" keyword)
+///     params: List of parameter values
+///     order_by: Optional list of (column, direction) tuples
+///     offset: Optional number of rows to skip
+///     limit: Optional maximum number of rows to return
+///     select_cols: Optional list of column names to select
+///
+/// Returns:
+///     List of dictionaries with row data
+///
+/// Example:
+///     rows = await find_many(
+///         "users",
+///         "age > $1 AND status = $2",
+///         [25, "active"],
+///         order_by=[("name", "ASC")],
+///         limit=10
+///     )
+#[pyfunction]
+#[pyo3(signature = (table, where_clause, params, order_by=None, offset=None, limit=None, select_cols=None))]
+fn find_many<'py>(
+    py: Python<'py>,
+    table: String,
+    where_clause: String,
+    params: Vec<Bound<'py, PyAny>>,
+    order_by: Option<Vec<(String, String)>>,
+    offset: Option<i64>,
+    limit: Option<i64>,
+    select_cols: Option<Vec<String>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+
+    // Phase 1: Extract Python parameter values (GIL held)
+    let extracted_params: Vec<data_bridge_postgres::ExtractedValue> = params
+        .iter()
+        .map(|param| py_value_to_extracted(py, param))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    // Phase 2: Execute SQL (GIL released via future_into_py)
+    future_into_py(py, async move {
+        // Build SELECT clause
+        let select_clause = if let Some(cols) = select_cols {
+            cols.join(", ")
+        } else {
+            "*".to_string()
+        };
+
+        // Start building SQL
+        let mut sql = format!("SELECT {} FROM {}", select_clause, table);
+
+        // Add WHERE clause if provided
+        if !where_clause.is_empty() {
+            sql.push_str(&format!(" WHERE {}", where_clause));
+        }
+
+        // Add ORDER BY
+        if let Some(order_specs) = order_by {
+            if !order_specs.is_empty() {
+                sql.push_str(" ORDER BY ");
+                let order_clauses: Vec<String> = order_specs
+                    .iter()
+                    .map(|(col, dir)| format!("{} {}", col, dir))
+                    .collect();
+                sql.push_str(&order_clauses.join(", "));
+            }
+        }
+
+        // Add LIMIT
+        if let Some(l) = limit {
+            sql.push_str(&format!(" LIMIT {}", l));
+        }
+
+        // Add OFFSET
+        if let Some(o) = offset {
+            sql.push_str(&format!(" OFFSET {}", o));
+        }
+
+        // Bind parameters
+        let mut args = sqlx::postgres::PgArguments::default();
+        for param in &extracted_params {
+            param.bind_to_arguments(&mut args)
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to bind parameter: {}", e)))?;
+        }
+
+        // Execute query
+        let pg_rows = sqlx::query_with(&sql, args)
+            .fetch_all(conn.pool())
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Query failed: {}", e)))?;
+
+        // Phase 3: Convert results to Python (GIL acquired inside future_into_py)
+        let mut wrappers = Vec::with_capacity(pg_rows.len());
+        for pg_row in &pg_rows {
+            let row = Row::from_sqlx(pg_row)
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to convert row: {}", e)))?;
+            wrappers.push(RowWrapper::from_row(&row)?);
+        }
+
+        Ok(RowsWrapper(wrappers))
+    })
+}
+
 // ============================================================================
 // Module Registration
 // ============================================================================
@@ -841,8 +1077,11 @@ pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(insert_many, m)?)?;
     m.add_function(wrap_pyfunction!(fetch_one, m)?)?;
     m.add_function(wrap_pyfunction!(fetch_all, m)?)?;
+    m.add_function(wrap_pyfunction!(find_many, m)?)?;
     m.add_function(wrap_pyfunction!(update_one, m)?)?;
+    m.add_function(wrap_pyfunction!(update_many, m)?)?;
     m.add_function(wrap_pyfunction!(delete_one, m)?)?;
+    m.add_function(wrap_pyfunction!(delete_many, m)?)?;
     m.add_function(wrap_pyfunction!(count, m)?)?;
     m.add_function(wrap_pyfunction!(execute, m)?)?;
     m.add_function(wrap_pyfunction!(begin_transaction, m)?)?;

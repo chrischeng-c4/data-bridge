@@ -128,7 +128,7 @@ async def _async_setup():
     # Initialize SQLAlchemy
     try:
         from sqlalchemy.ext.asyncio import create_async_engine
-        from .models import Base
+        from tests.postgres.benchmarks.models import Base
 
         async_uri = postgres_uri.replace("postgresql://", "postgresql+asyncpg://")
         _sqlalchemy_engine = create_async_engine(

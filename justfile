@@ -55,6 +55,8 @@ bench:
 
 # Run PostgreSQL benchmarks (data-bridge vs SQLAlchemy)
 bench-postgres:
+    #!/usr/bin/env bash
+    POSTGRES_URI="${POSTGRES_URI:-postgresql://rstn:rstn@localhost:5432/data_bridge_benchmark}" \
     uv run python benchmarks/bench_postgres_comparison.py
 
 # Run with verbose output

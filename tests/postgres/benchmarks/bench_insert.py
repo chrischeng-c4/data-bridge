@@ -2,9 +2,9 @@
 
 import pytest
 from data_bridge.test import BenchmarkGroup, register_group
-from .models import DBUser, SAUser, SQLALCHEMY_AVAILABLE
-from .conftest import generate_user_data
-from . import benchmark_setup
+from tests.postgres.benchmarks.models import DBUser, SAUser, SQLALCHEMY_AVAILABLE
+from tests.postgres.benchmarks.conftest import generate_user_data
+from tests.postgres.benchmarks import benchmark_setup
 
 
 # =====================

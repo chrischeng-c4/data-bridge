@@ -325,12 +325,46 @@ class TestDeleteMany:
                 await User.delete_many(User.age < 18)
 
     @pytest.mark.asyncio
-    async def test_delete_many_not_implemented(self, User):
-        """Test delete_many() with filters raises NotImplementedError."""
+    async def test_delete_many_with_filters(self, User):
+        """Test delete_many() with filters works correctly."""
         with patch('data_bridge.postgres.table._engine') as mock_engine:
-            # Filter conversion not yet implemented
-            with pytest.raises(NotImplementedError):
-                await User.delete_many(User.age < 18)
+            mock_engine.delete_many = AsyncMock(return_value=5)
+            result = await User.delete_many(User.age < 18)
+            assert result == 5
+            # Verify delete_many was called with correct arguments
+            mock_engine.delete_many.assert_called_once()
+            args = mock_engine.delete_many.call_args[0]
+            assert args[0] == "public.users"  # table name
+            assert "age < $1" in args[1]  # WHERE clause
+            assert args[2] == [18]  # parameters
+
+    @pytest.mark.asyncio
+    async def test_delete_many_no_filters(self, User):
+        """Test delete_many() without filters (delete all)."""
+        with patch('data_bridge.postgres.table._engine') as mock_engine:
+            mock_engine.delete_many = AsyncMock(return_value=10)
+            result = await User.delete_many()
+            assert result == 10
+            # Verify delete_many was called with empty WHERE clause
+            mock_engine.delete_many.assert_called_once()
+            args = mock_engine.delete_many.call_args[0]
+            assert args[0] == "public.users"  # table name
+            assert args[1] == ""  # Empty WHERE clause
+            assert args[2] == []  # No parameters
+
+    @pytest.mark.asyncio
+    async def test_delete_many_with_dict_filter(self, User):
+        """Test delete_many() with dict filter."""
+        with patch('data_bridge.postgres.table._engine') as mock_engine:
+            mock_engine.delete_many = AsyncMock(return_value=3)
+            result = await User.delete_many({"name": "Alice"})
+            assert result == 3
+            # Verify delete_many was called with correct arguments
+            mock_engine.delete_many.assert_called_once()
+            args = mock_engine.delete_many.call_args[0]
+            assert args[0] == "public.users"  # table name
+            assert "name = $1" in args[1]  # WHERE clause
+            assert args[2] == ["Alice"]  # parameters
 
 
 class TestUpdateMany:
@@ -344,12 +378,49 @@ class TestUpdateMany:
                 await User.update_many({"status": "active"}, User.age >= 18)
 
     @pytest.mark.asyncio
-    async def test_update_many_not_implemented(self, User):
-        """Test update_many() with filters raises NotImplementedError."""
+    async def test_update_many_with_filters(self, User):
+        """Test update_many() with filters works correctly."""
         with patch('data_bridge.postgres.table._engine') as mock_engine:
-            # Filter conversion not yet implemented
-            with pytest.raises(NotImplementedError):
-                await User.update_many({"status": "active"}, User.age >= 18)
+            mock_engine.update_many = AsyncMock(return_value=5)
+            result = await User.update_many({"status": "active"}, User.age >= 18)
+            assert result == 5
+            # Verify update_many was called with correct arguments
+            mock_engine.update_many.assert_called_once()
+            args = mock_engine.update_many.call_args[0]
+            assert args[0] == "public.users"  # table name
+            assert args[1] == {"status": "active"}  # updates
+            assert "age >= $1" in args[2]  # WHERE clause
+            assert args[3] == [18]  # parameters
+
+    @pytest.mark.asyncio
+    async def test_update_many_no_filters(self, User):
+        """Test update_many() without filters (update all)."""
+        with patch('data_bridge.postgres.table._engine') as mock_engine:
+            mock_engine.update_many = AsyncMock(return_value=10)
+            result = await User.update_many({"status": "inactive"})
+            assert result == 10
+            # Verify update_many was called with empty WHERE clause
+            mock_engine.update_many.assert_called_once()
+            args = mock_engine.update_many.call_args[0]
+            assert args[0] == "public.users"  # table name
+            assert args[1] == {"status": "inactive"}  # updates
+            assert args[2] == ""  # Empty WHERE clause
+            assert args[3] == []  # No parameters
+
+    @pytest.mark.asyncio
+    async def test_update_many_with_dict_filter(self, User):
+        """Test update_many() with dict filter."""
+        with patch('data_bridge.postgres.table._engine') as mock_engine:
+            mock_engine.update_many = AsyncMock(return_value=3)
+            result = await User.update_many({"age": 31}, {"name": "Alice"})
+            assert result == 3
+            # Verify update_many was called with correct arguments
+            mock_engine.update_many.assert_called_once()
+            args = mock_engine.update_many.call_args[0]
+            assert args[0] == "public.users"  # table name
+            assert args[1] == {"age": 31}  # updates
+            assert "name = $1" in args[2]  # WHERE clause
+            assert args[3] == ["Alice"]  # parameters
 
 
 class TestFindOne:
